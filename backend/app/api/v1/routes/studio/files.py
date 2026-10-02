@@ -27,7 +27,7 @@ router = APIRouter()
     summary="文件列表（分页）",
 )
 async def list_files_api(
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     q: str | None = Query(None, description="关键字，过滤 name"),
     order: str | None = Query(None),
     is_desc: bool = Query(False),
@@ -81,7 +81,7 @@ async def list_files_api(
 async def upload_file_api(
     file: UploadFile = File(..., description="要上传的二进制文件"),
     name: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
     project_id: str | None = Form(None, description="可选：写入 file_usages 的项目 ID"),
     chapter_id: str | None = Form(None),
     shot_id: str | None = Form(None),
@@ -107,7 +107,7 @@ async def upload_file_api(
 )
 async def download_file_api(
     file_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ):
     return await build_download_response(db, file_id=file_id)
 
@@ -119,7 +119,7 @@ async def download_file_api(
 )
 async def get_file_storage_info_api(
     file_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[dict]:
     return success_response(await get_storage_info(db, file_id=file_id))
 
@@ -131,7 +131,7 @@ async def get_file_storage_info_api(
 )
 async def get_file_detail(
     file_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[FileDetailRead]:
     return success_response(await get_file_detail_service(db, file_id=file_id))
 
@@ -144,7 +144,7 @@ async def get_file_detail(
 async def update_file_meta(
     file_id: str,
     body: FileUpdate,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[FileRead]:
     obj = await update_file_meta_service(db, file_id=file_id, body=body)
     return success_response(FileRead.model_validate(obj))
@@ -157,7 +157,7 @@ async def update_file_meta(
 )
 async def delete_file_api(
     file_id: str,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncSession = Depends(get_db, scope="function"),
 ) -> ApiResponse[None]:
     await delete_file(db, file_id=file_id)
     return empty_response()

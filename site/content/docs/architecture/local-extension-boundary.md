@@ -1,0 +1,41 @@
+---
+title: 本机源码与扩展边界
+description: 官方完整源码的当前边界以及与平安剧场的隔离关系。
+---
+
+# 本机源码与扩展边界
+
+## 当前基线
+
+Jellyfish 完整仓库独立位于 `jellyfish/`，有自己的 Git 历史、`origin` 和 `codex/jellyfish-local` 分支。原版界面保留，不用静态假页面替代。平安剧场 F01–F07、历史数据、模型配置及质量门不并入本仓库。
+
+## 现有模块
+
+| 扩展位置 | 当前职责 |
+| --- | --- |
+| `front/src/pages/`、组件与路由 | 官方项目、资产、镜头、工作室、模型、文件等 UI |
+| `front/src/services/generated/` | OpenAPI 生成的接口客户端 |
+| `backend/app/api/`、`schemas/` | HTTP 边界、输入输出契约 |
+| `backend/app/services/` | 业务逻辑与状态编排 |
+| `backend/app/models/` | Jellyfish 自己的数据库模型 |
+| `backend/app/core/contracts/` | 生成能力共用契约 |
+| `backend/app/core/integrations/` | 供应商适配 |
+| 后端任务模块、Celery | 异步执行 |
+| `backend/app/core/storage.py` | S3 兼容对象存储 |
+| `deploy/local/` | 独立本机部署覆盖及操作入口 |
+
+这些是实际已有模块边界，不新增空壳插件系统或第二套 API。
+
+## 部署差异
+
+本地覆盖调整端口、回环绑定、重启策略、worker 并发、对象存储访问地址/虚拟主机别名及初始化保护。数据库初始化仍使用原版 `init_db.py` 和 SQL。提示词表已存在数据时不重复导入默认模板，避免重启覆盖后续自定义模板。
+
+所有 API 的数据库依赖显式使用 FastAPI `function` scope，提交与关闭发生在发送成功响应之前。原有回滚规则保留；字段、路径、状态语义均未变。这修复了上游 `request` scope 导致的立即读取旧值风险，以及响应已成功后才发现 commit 失败的风险。新增回归覆盖提交顺序、commit 失败、业务拒绝和全路由依赖检查。
+
+原版 `front/src/pages/`、组件、样式和布局未修改。OpenAPI 下载工具支持指定本机 8010 地址；重新生成后的 OpenAPI 和 generated client 无差异。
+
+模型供应商不会从平安剧场自动导入；真实生成需要单独配置及验收。官方现有 shot 状态、视频准备度、任务状态保持原义，不伪装成平安剧场的 APPROVED 质量门。
+
+## 上游更新边界
+
+上游发布与本地功能开发必须通过 Git 差异进行评审，不直接拉取覆盖本地修改。本次仅建立可修改的完整源码基线，没有移植平安剧场导演引擎、版本/审批逻辑、事件埋点或组织隔离。未来融合前必须分别审查身份、引用、状态、版本及迁移契约。

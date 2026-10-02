@@ -1,0 +1,59 @@
+# Local isolation only: preserve upstream application code and UI.
+services:
+  mysql:
+    ports: !override
+      - "127.0.0.1:${MYSQL_PORT:-3307}:3306"
+    restart: unless-stopped
+  redis:
+    ports: !override
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
+    restart: unless-stopped
+  rustfs:
+    # Match upstream's virtual-hosted S3 client without changing application code.
+    environment:
+      RUSTFS_SERVER_DOMAINS: rustfs
+    networks:
+      default:
+        aliases:
+          - "${S3_BUCKET_NAME}.rustfs"
+    ports: !override
+      - "127.0.0.1:${RUSTFS_PORT:-9002}:9000"
+      - "127.0.0.1:${RUSTFS_CONSOLE_PORT:-9003}:9001"
+    restart: unless-stopped
+  backend-init-db:
+    environment:
+      OPENAI_API_KEY: ""
+  mysql-init-sql:
+    # Seed only an empty template table; subsequent starts preserve custom edits.
+    command:
+      - bash
+      - -lc
+      - >-
+        set -e;
+        export MYSQL_PWD="$$MYSQL_PASSWORD";
+        count=$$(mysql -N -s -h mysql -u"$$MYSQL_USER" "$$MYSQL_DATABASE" -e 'SELECT COUNT(*) FROM prompt_templates');
+        if [ "$$count" = "0" ]; then
+        for f in $$(find /sql -maxdepth 1 -type f -name '*.sql' | sort); do
+        mysql --default-character-set=utf8mb4 -h mysql -u"$$MYSQL_USER" "$$MYSQL_DATABASE" < "$$f";
+        done;
+        else echo 'Existing templates preserved; initialization skipped'; fi
+  backend:
+    ports: !override
+      - "127.0.0.1:8010:8000"
+    environment:
+      OPENAI_API_KEY: ""
+      S3_PUBLIC_BASE_URL: "http://127.0.0.1:${RUSTFS_PORT:-9002}/${S3_BUCKET_NAME}"
+    volumes:
+      - ./../local/init_local_storage.py:/app/init_local_storage.py:ro
+    restart: unless-stopped
+  celery-worker:
+    # Keep this local deployment within the current shared Docker memory budget.
+    command: ["uv", "run", "celery", "-A", "app.core.celery_app:celery_app", "worker", "-l", "info", "--concurrency=1"]
+    environment:
+      OPENAI_API_KEY: ""
+      S3_PUBLIC_BASE_URL: "http://127.0.0.1:${RUSTFS_PORT:-9002}/${S3_BUCKET_NAME}"
+    restart: unless-stopped
+  front:
+    ports: !override
+      - "127.0.0.1:7788:80"
+    restart: unless-stopped

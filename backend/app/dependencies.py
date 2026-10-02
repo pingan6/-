@@ -11,7 +11,11 @@ from app.services.llm.resolver import build_default_text_llm
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """提供异步数据库会话。"""
+    """提供异步事务；调用方使用 function scope，在发送成功响应前提交。
+
+    request scope 会在响应发送之后退出 yield，导致立即读到旧值，甚至将
+    commit 失败隐藏在已发送的成功响应之后。保留每请求一次事务及失败回滚。
+    """
     async with async_session_maker() as session:
         try:
             yield session
@@ -23,11 +27,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.close()
 
 
-async def get_llm(db: AsyncSession = Depends(get_db)) -> BaseChatModel:
+async def get_llm(db: AsyncSession = Depends(get_db, scope="function")) -> BaseChatModel:
     """提供默认文本 LLM（ChatOpenAI）。"""
     return await build_default_text_llm(db, thinking=True)
 
-async def get_nothinking_llm(db: AsyncSession = Depends(get_db)) -> BaseChatModel:
+async def get_nothinking_llm(db: AsyncSession = Depends(get_db, scope="function")) -> BaseChatModel:
     """提供默认文本 LLM（ChatOpenAI，禁用 thinking）。"""
     return await build_default_text_llm(db, thinking=False)
 
