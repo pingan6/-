@@ -9,6 +9,7 @@ import {
 } from '@ant-design/icons'
 import { useParams, Link } from 'react-router-dom'
 import api from '../../../services/aiStudioApi'
+import { getProjectChaptersPath } from '../project/ProjectWorkbench/routes'
 import type { TimelineClip } from '../../../mocks/data'
 
 const { Content } = Layout
@@ -39,7 +40,7 @@ const VideoEditor: React.FC = () => {
     <div className="space-y-4">
       <div className="mb-2">
         <Link
-          to={projectId ? `/projects/${projectId}/chapters` : '/projects'}
+          to={projectId ? getProjectChaptersPath(projectId) : '/projects'}
           className="text-sm text-gray-600 hover:text-blue-600 flex items-center gap-1"
         >
           <ArrowLeftOutlined /> {projectId ? '返回章节列表' : '项目列表'}

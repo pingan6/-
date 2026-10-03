@@ -1,6 +1,16 @@
 node_modules/
 dist/
 .env
+
+# Local Docker client credentials and generated runtime state are never published.
+deploy/local/docker-public/.token_seed*
+deploy/local/docker-public/buildx/
+deploy/local/docker-public/contexts/
+deploy/local/docker-public/cli-plugins/
+deploy/local/docker-public/trust/
+deploy/local/docker-public/config.*.json
+# Local acceptance screenshots are evidence, not published application assets.
+deploy/local/pingan-*.png
 .env.local
 .DS_Store
 *.log

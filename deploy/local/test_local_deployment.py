@@ -58,7 +58,16 @@ def test_health_and_original_ui(api):
     assert data(api.get("/health"))["status"] == "ok"
     response = api.get("http://127.0.0.1:7788")
     assert response.status_code == 200
-    assert "Jellyfish" in response.text
+    assert "平安科技" in response.text
+
+
+@pytest.mark.parametrize("path", ["/projects", "/assets?tab=actor", "/prompts", "/models", "/settings"])
+def test_frontend_routes_refresh_without_redirect(api, path):
+    """SPA routes must serve the app directly, including the static-directory collision."""
+    response = api.get(f"http://127.0.0.1:7788{path}")
+    assert response.status_code == 200
+    assert "location" not in response.headers
+    assert "平安科技" in response.text
 
 
 def test_project_chapter_shot_persistence(api, sample):
@@ -67,6 +76,7 @@ def test_project_chapter_shot_persistence(api, sample):
         item = sample[kind]
         assert data(api.get(f"/api/v1/studio/{route}/{item['id']}"))["id"] == item["id"]
     shot_id = sample["shot"]["id"]
+    assert data(api.get(f"/api/v1/studio/shot-details/{shot_id}"))["id"] == shot_id
     data(api.patch(f"/api/v1/studio/shots/{shot_id}", json={"title": "已保存的验收镜头"}))
     assert data(api.get(f"/api/v1/studio/shots/{shot_id}"))["title"] == "已保存的验收镜头"
 

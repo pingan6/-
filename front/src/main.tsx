@@ -9,7 +9,9 @@ import './index.css'
 import './i18n'
 import './services/openapi'
 import { useAppStore } from './store/useAppStore'
+import { pinganTheme } from './theme/pingan'
 
+/** Apply the same locale and visual theme to every route and its dialogs. */
 const RootApp: React.FC = () => {
   const language = useAppStore((state) => state.language)
   const antdLocale = language === 'en-US' ? enUS : zhCN
@@ -17,12 +19,7 @@ const RootApp: React.FC = () => {
   return (
     <ConfigProvider
       locale={antdLocale}
-      theme={{
-        token: {
-          colorPrimary: '#1677ff',
-          borderRadius: 6,
-        },
-      }}
+      theme={pinganTheme}
     >
       <App />
     </ConfigProvider>
@@ -82,4 +79,3 @@ async function enableMocking() {
 }
 
 void enableMocking()
-

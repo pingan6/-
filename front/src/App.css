@@ -29,17 +29,7 @@
 
 /* Tailwind and Ant Design compatibility */
 .ant-card {
-  border: 1px solid #f0f0f0;
-}
-
-.ant-btn-primary {
-  background: #1890ff;
-  border-color: #1890ff;
-}
-
-.ant-btn-primary:hover {
-  background: #40a9ff;
-  border-color: #40a9ff;
+  border: 1px solid var(--ant-color-border-secondary, #292930);
 }
 
 /* Project workbench: tab 选中态主色下划线 */
@@ -61,4 +51,3 @@
 .animate-fadeIn {
   animation: fadeIn 0.25s ease-out;
 }
-

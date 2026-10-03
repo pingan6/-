@@ -1,7 +1,7 @@
 {
-  "title": "Jellyfish",
+  "title": "平安科技",
   "subtitle": "AI Short-form Studio",
-  "welcome": "Welcome to Jellyfish",
+  "welcome": "Welcome to 平安科技",
   "menu": {
     "settings": "Settings"
   },
@@ -14,4 +14,3 @@
     "en": "English"
   }
 }
-

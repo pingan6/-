@@ -5,7 +5,7 @@ description: 启动官方 Jellyfish 界面、API、任务服务和独立存储�
 
 # 独立本机部署
 
-本目录是 Jellyfish 官方仓库的完整 Git 克隆，不是界面原型。上游版本为 `a9678194ddf2d9be3ccbe78d4287d87d5089e123`，本地开发分支为 `codex/jellyfish-local`。原版界面、领域字段和业务流程保留；后端仅做“提交事务后才返回成功”的可靠性修补，前端仅增加 OpenAPI 下载地址的工具配置。本机部署调整单独放在 `deploy/local/`，上游原始版本仍完整可追溯。
+本目录是基于 Jellyfish 官方完整 Git 克隆的本地产品，不是静态界面原型。上游版本为 `a9678194ddf2d9be3ccbe78d4287d87d5089e123`，本地开发分支为 `codex/jellyfish-local`。平台界面名称已按最新确认改为“平安科技”，副标题为“AI 短剧工作台”，项目列表与分镜工作室已应用视觉样板；领域字段和业务流程保留。后端保留“提交事务后才返回成功”的可靠性修补。本机部署调整单独放在 `deploy/local/`，上游原始版本仍完整可追溯。
 
 ## 启动与停止
 
@@ -57,6 +57,7 @@ Compose 项目名为 `jellyfish-local`；数据库和素材分别保存在它自
 cd front
 npx --yes pnpm@9.15.9 install --frozen-lockfile
 npx --yes pnpm@9.15.9 run build
+npx --yes pnpm@9.15.9 run test:ui
 ```
 
 后端使用 Python 3.12 与 uv：
@@ -92,3 +93,11 @@ OPENAPI_URL=http://127.0.0.1:8010/openapi.json npx --yes pnpm@9.15.9 run openapi
 ## 后续修改
 
 在本地分支上逐项提交自己的功能，不直接覆盖上游 main。应用逻辑变更与本机部署文件分别管理。接口修改后按根目录 `AGENTS.md` 同步 OpenAPI 和前端 generated client。保留根目录 `LICENSE` 和上游版权信息。
+
+## 前端构建资源与保存恢复
+
+前端 Docker 构建的 Node 堆默认上限为 768MB，避免共享本机 Docker 内存耗尽。可在 `docker compose build` 中通过 `--build-arg FRONTEND_BUILD_MAX_OLD_SPACE_MB=数值` 覆盖，仅改变编译资源，不能解决生产接口延迟。保持现有部署命令，不删除卷或覆盖 `.env`。
+
+分镜工作室的详情编辑显示“自动保存中 / 已保存 / 保存失败”。失败时点击“重试保存”；未保存详情在当前标签页恢复，关闭标签页或清理浏览器数据可能丢失，不代替服务器持久化。若出现“浏览器草稿备份不可用”，保存成功前不要关闭页面。
+
+完整免费验收及限制见 `architecture/pingan-reliability-20261002.md`。不要因为本机可访问就将其暴露到公网。

@@ -1,10 +1,9 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { Card, Button, Tag, Space, Table, Empty, Modal, Input, Dropdown, message } from 'antd'
+import { Card, Button, Tag, Space, Table, Spin, Modal, Input, Dropdown, message } from 'antd'
 import type { MenuProps, TableColumnsType } from 'antd'
 import {
   EditOutlined,
   FileSearchOutlined,
-  LoadingOutlined,
   MoreOutlined,
   PlusOutlined,
   ScissorOutlined,
@@ -12,15 +11,14 @@ import {
   SyncOutlined,
 } from '@ant-design/icons'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ScriptProcessingService, StudioChaptersService } from '../../../../../services/generated'
-import { chapterStatusMap } from '../constants'
+import { StudioChaptersService } from '../../../../../services/generated'
+import { ScriptInput } from '../../../../../components/ScriptInput'
 import { getChapterShotsPath, getChapterStudioPath } from '../routes'
 import { useChapters, newId, type Chapter } from '../hooks/useProjectData'
 import { ChapterRawTextEditorModal } from '../../../chapter/components/ChapterRawTextEditorModal'
 import { ensureHasShotsBeforeShooting } from '../ensureHasShotsBeforeShooting'
 import { getChapterPreparationState } from '../chapterPreparation'
-import { loadChapterFlowStats, type ChapterFlowStats } from '../projectFlowStats'
-import { executeAsyncTaskCreate, executeTaskCancel } from '../../../components/taskActionHelpers'
+import { executeTaskCancel } from '../../../components/taskActionHelpers'
 import { TASK_COPY } from '../../../components/taskCopy'
 import { useTaskPageContext } from '../../../components/taskPageContext'
 import { useTaskUiStore } from '../../../components/taskUiStore'
@@ -30,10 +28,10 @@ import {
   useChapterDivisionTaskMapPolling,
 } from '../chapterDivisionTasks'
 
-const { TextArea } = Input
 const CREATE_PARAM = 'create'
 const EDIT_PARAM = 'edit'
 
+/** Keep script import and chapter selection focused on the next preparation step. */
 export function ChaptersTab() {
   const taskCopy = TASK_COPY.chapterDivision
   const navigate = useNavigate()
@@ -46,7 +44,8 @@ export function ChaptersTab() {
   const [createOpen, setCreateOpen] = useState(false)
   const [createTitle, setCreateTitle] = useState('')
   const [createContent, setCreateContent] = useState('')
-  const [chapterFlowMap, setChapterFlowMap] = useState<Record<string, ChapterFlowStats>>({})
+  const [creating, setCreating] = useState(false)
+  const [listView, setListView] = useState(false)
   const [chapterDivisionActionId, setChapterDivisionActionId] = useState<string | null>(null)
   const taskUiUpsert = useTaskUiStore((state) => state.upsertTask)
   const taskUiRemove = useTaskUiStore((state) => state.removeTask)
@@ -96,31 +95,6 @@ export function ChaptersTab() {
     )
   }, [chapters, editParam, setSearchParams])
 
-  useEffect(() => {
-    let cancelled = false
-    if (!chapters.length) {
-      setChapterFlowMap({})
-      return () => {
-        cancelled = true
-      }
-    }
-
-    const run = async () => {
-      try {
-        const rows = await loadChapterFlowStats(chapters)
-        if (!cancelled) {
-          setChapterFlowMap(Object.fromEntries(rows.map((row) => [row.chapterId, row])))
-        }
-      } catch {
-        if (!cancelled) setChapterFlowMap({})
-      }
-    }
-
-    void run()
-    return () => {
-      cancelled = true
-    }
-  }, [chapters])
 
   const openEditModal = (chapter: Chapter) => {
     setEditingChapter(chapter)
@@ -130,11 +104,11 @@ export function ChaptersTab() {
   const openCreateNextStep = (chapter: Chapter, hasRawText: boolean) => {
     if (!projectId) return
     Modal.confirm({
-      title: '章节创建成功',
+      title: '剧本已保存',
       content: hasRawText
         ? '这一章已经有原文内容，接下来更适合直接提取分镜。'
         : '这一章还没有原文内容，建议先补章节原文。',
-      okText: hasRawText ? '立即提取分镜' : '继续编辑原文',
+      okText: hasRawText ? '下一步：拆分镜' : '继续编辑剧本',
       cancelText: '稍后处理',
       onOk: () => {
         if (hasRawText) {
@@ -151,7 +125,8 @@ export function ChaptersTab() {
       message.warning('请输入章节标题')
       return
     }
-    if (!projectId) return
+    if (!projectId || creating) return
+    setCreating(true)
     try {
       const nextIndex = Math.max(0, ...chapters.map((c) => c.index)) + 1
       const createdId = newId('c')
@@ -180,14 +155,16 @@ export function ChaptersTab() {
           status: 'draft',
         },
       })
-      message.success('章节创建成功')
+      message.success('剧本已保存')
       setCreateOpen(false)
       setCreateTitle('')
       setCreateContent('')
       await refresh()
       openCreateNextStep(draftChapter, !!rawText.trim())
     } catch {
-      message.error('创建章节失败')
+      message.error('保存失败，输入内容已保留，请重试')
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -238,7 +215,7 @@ export function ChaptersTab() {
       return
     }
     if (state.key === 'prepare_shots') {
-      navigate(getChapterStudioPath(projectId, record.id))
+      navigate(getChapterShotsPath(projectId, record.id))
       return
     }
     void ensureHasShotsBeforeShooting({
@@ -247,39 +224,6 @@ export function ChaptersTab() {
       storyboardCount: record.storyboardCount,
       navigate,
     })
-  }
-
-  const handleDivideAsync = async (record: Chapter) => {
-    const scriptText = record.rawText?.trim()
-    if (!scriptText) {
-      message.warning('请先补章节原文')
-      return
-    }
-    setChapterDivisionActionId(record.id)
-    try {
-      await executeAsyncTaskCreate({
-        request: () =>
-          ScriptProcessingService.divideScriptAsyncApiV1ScriptProcessingDivideAsyncPost({
-            requestBody: {
-              chapter_id: record.id,
-              script_text: scriptText,
-              write_to_db: true,
-            },
-          }),
-        trackTaskData: (data) => {
-          const tracked = createRelationTaskState(data)
-          setChapterDivisionTaskMap(upsertRelationTaskStateInMap(chapterDivisionTaskMap, record.id, tracked))
-          return tracked
-        },
-        startedMessage: taskCopy.startedMessage,
-        reusedMessage: taskCopy.reusedMessage,
-        fallbackErrorMessage: '启动分镜提取失败',
-      })
-    } catch {
-      // executeAsyncTaskCreate 已统一处理错误提示
-    } finally {
-      setChapterDivisionActionId(null)
-    }
   }
 
   const handleCancelDivideTask = async (record: Chapter) => {
@@ -386,6 +330,22 @@ export function ChaptersTab() {
     ].filter(Boolean)
   }
 
+  /** Both card and table entries navigate to preparation; neither starts a paid task. */
+  const renderChapterActions = (record: Chapter) => {
+    const state = getChapterPreparationState(record)
+    const activeTask = chapterDivisionTaskMap[record.id]
+    const primaryText = activeTask ? activeTask.cancelRequested ? '查看取消进度' : '查看提取进度' : state.primaryAction
+    return <Space size={8}>
+      <Button type="primary" size="small" onClick={() => handlePrimaryAction(record)}
+        icon={activeTask ? <SyncOutlined spin /> : state.primaryIcon}
+        loading={chapterDivisionActionId === record.id && !activeTask}>{primaryText}</Button>
+      <Dropdown trigger={['click']} menu={{ items: buildActionMenuItems(record) }}>
+        <Button size="small" icon={<MoreOutlined />} aria-label={`第${record.index}集更多操作`}
+          loading={chapterDivisionActionId === record.id && !!activeTask} />
+      </Dropdown>
+    </Space>
+  }
+
   const columns: TableColumnsType<Chapter> = [
     { title: '章节', dataIndex: 'index', key: 'index', width: 80, render: (v: number) => `第${v}集` },
     {
@@ -433,199 +393,55 @@ export function ChaptersTab() {
       },
     },
     {
-      title: '分镜流转',
-      key: 'shotFlow',
-      width: 220,
-      render: (_, record) => {
-        const stats = chapterFlowMap[record.id]
-        return (
-          <div className="flex flex-wrap gap-1">
-            <Tag bordered={false} color="gold" className="mr-0">
-              待确认 {stats?.pendingConfirmShots ?? 0}
-            </Tag>
-            <Tag bordered={false} color="green" className="mr-0">
-              已就绪 {stats?.readyShots ?? 0}
-            </Tag>
-            <Tag bordered={false} color="processing" className="mr-0">
-              生成中 {stats?.generatingShots ?? 0}
-            </Tag>
-          </div>
-        )
-      },
-    },
-    {
-      title: '状态',
-      dataIndex: 'status',
-      key: 'status',
-      width: 100,
-      render: (status: Chapter['status']) => (
-        <Tag color={chapterStatusMap[status].color}>{chapterStatusMap[status].text}</Tag>
-      ),
-    },
-    { title: '更新时间', dataIndex: 'updatedAt', key: 'updatedAt', width: 160 },
-    {
       title: '操作',
       key: 'action',
       width: 230,
-      render: (_, record) => {
-        const state = getChapterPreparationState(record)
-        const activeTask = chapterDivisionTaskMap[record.id]
-        const primaryIcon = activeTask
-          ? activeTask.cancelRequested
-            ? <SyncOutlined spin />
-            : <LoadingOutlined />
-          : state.primaryIcon
-        const primaryText = activeTask
-          ? activeTask.cancelRequested
-            ? '查看取消进度'
-            : '查看提取进度'
-          : state.primaryAction
-        const primaryLoading = chapterDivisionActionId === record.id && state.key === 'extract_shots' && !activeTask
-
-        return (
-          <Space size={8}>
-            <Button
-              type="primary"
-              size="small"
-              onClick={() => {
-                if (state.key === 'extract_shots' && !activeTask) {
-                  void handleDivideAsync(record)
-                  return
-                }
-                handlePrimaryAction(record)
-              }}
-              style={{ minWidth: 132, justifyContent: 'center' }}
-              icon={primaryIcon}
-              loading={primaryLoading}
-            >
-              {primaryText}
-            </Button>
-            <Dropdown
-              trigger={['click']}
-              menu={{ items: buildActionMenuItems(record) }}
-            >
-              <Button
-                size="small"
-                icon={<MoreOutlined />}
-                aria-label="更多操作"
-                loading={chapterDivisionActionId === record.id && !!activeTask}
-              />
-            </Dropdown>
-          </Space>
-        )
-      },
+      render: (_, record) => renderChapterActions(record),
     },
   ]
 
-  if (chapters.length === 0 && !loading) {
-    return (
-      <>
-        <Card>
-          <Empty description="还没有任何章节，立即创建第一章吧" image={Empty.PRESENTED_IMAGE_SIMPLE}>
-          <Space>
-            <Button type="primary" size="large" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-              创建第一章
-            </Button>
-          </Space>
-        </Empty>
-        </Card>
-        <Modal
-          title="新建章节"
-          open={createOpen}
-          onCancel={() => setCreateOpen(false)}
-          onOk={useMock ? handleCreateChapterMock : handleCreateChapter}
-          okText="创建"
-          width={560}
-        >
-          <div className="space-y-3">
-            <div>
-              <span className="text-gray-600 text-sm">章节标题</span>
-              <Input
-                placeholder="例如：第1集 出租屋里的争吵"
-                value={createTitle}
-                onChange={(e) => setCreateTitle(e.target.value)}
-                className="mt-1"
-              />
-            </div>
-            <div>
-              <span className="text-gray-600 text-sm">章节内容（可粘贴剧本）</span>
-              <TextArea
-                rows={6}
-                placeholder="粘贴文学剧本..."
-                value={createContent}
-                onChange={(e) => setCreateContent(e.target.value)}
-                className="mt-1 font-mono text-sm"
-              />
-            </div>
-          </div>
-        </Modal>
-      </>
-    )
-  }
-
   return (
-    <Card
-      title="章节列表"
-      extra={
-        <Space>
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>
-            新建章节
-          </Button>
-        </Space>
-      }
-    >
-      <Table<Chapter>
-        rowKey="id"
-        loading={loading}
-        columns={columns}
-        dataSource={chapters}
-        pagination={{ pageSize: 10 }}
-        size="small"
-      />
+    <Card className="pa-script-library" title={`本项目的剧本 · ${chapters.length} 集`} extra={<Space>
+      <Button onClick={() => setListView((previous) => !previous)}>{listView ? '卡片视图' : '列表视图'}</Button>
+      <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateOpen(true)}>上传 / 粘贴剧本</Button>
+    </Space>}>
+      {loading ? <div className="p-8"><Spin /> 正在加载剧本…</div> : listView
+        ? <Table<Chapter> rowKey="id" columns={columns} dataSource={chapters} pagination={{ pageSize: 10 }} size="middle" scroll={{ x: 740 }} />
+        : <div className="pa-script-grid">
+          <button type="button" className="pa-add-card" onClick={() => setCreateOpen(true)} aria-label="上传新剧本">
+            <PlusOutlined /><strong>上传 / 粘贴剧本</strong><small>每集一份剧本，保存后继续拆分镜</small>
+          </button>
+          {[...chapters].sort((a, b) => a.index - b.index).map((chapter) => {
+            const state = getChapterPreparationState(chapter)
+            const activeTask = chapterDivisionTaskMap[chapter.id]
+            return <article className="pa-script-card" key={chapter.id} aria-label={`第${chapter.index}集：${chapter.title}`}>
+              <header><span>第 {String(chapter.index).padStart(2, '0')} 集</span>
+                <Tag color={activeTask ? 'processing' : state.color}>{activeTask ? activeTask.cancelRequested ? '正在取消提取' : '分镜提取中' : state.text}</Tag></header>
+              <button type="button" className="pa-script-name" onClick={() => openEditModal(chapter)}>{chapter.title || '未命名章节'}</button>
+              <p className="pa-script-excerpt">{chapter.rawText?.trim().slice(0, 180) || '还没有剧本内容，点击标题补充。'}</p>
+              <p className="text-xs text-gray-500">{state.hint}</p>
+              <footer><span>{chapter.rawText?.length || 0} 字 · {chapter.storyboardCount || 0} 镜头</span></footer>
+              {renderChapterActions(chapter)}
+            </article>
+          })}
+        </div>}
 
-      <ChapterRawTextEditorModal
-        open={editOpen}
-        onClose={() => {
-          setEditOpen(false)
-          setEditingChapter(null)
-        }}
-        chapterId={editingChapter?.id}
-        onSaved={(next) => {
-          if (editingChapter?.id && typeof next.rawText === 'string') {
-            patchChapterLocal(editingChapter.id, { rawText: next.rawText })
-          }
+      <ChapterRawTextEditorModal open={editOpen} onClose={() => { setEditOpen(false); setEditingChapter(null) }}
+        chapterId={editingChapter?.id} onSaved={(saved) => {
+          if (editingChapter?.id && typeof saved.rawText === 'string') patchChapterLocal(editingChapter.id, { rawText: saved.rawText })
           void refresh()
-        }}
-      />
+        }} />
 
-      <Modal
-        title="新建章节"
-        open={createOpen}
-        onCancel={() => setCreateOpen(false)}
-        onOk={useMock ? handleCreateChapterMock : handleCreateChapter}
-        okText="创建"
-        width={560}
-      >
-        <div className="space-y-3">
+      <Modal title="上传 / 粘贴剧本" open={createOpen} onCancel={() => { if (!creating) setCreateOpen(false) }}
+        onOk={useMock ? handleCreateChapterMock : handleCreateChapter} okText="保存剧本" cancelText="取消"
+        confirmLoading={creating} cancelButtonProps={{ disabled: creating }} closable={!creating} maskClosable={!creating}
+        width={680} styles={{ body: { maxHeight: '65vh', overflowY: 'auto' } }}>
+        <div className="space-y-4">
           <div>
-            <span className="text-gray-600 text-sm">章节标题</span>
-            <Input
-              placeholder="例如：第1集 出租屋里的争吵"
-              value={createTitle}
-              onChange={(e) => setCreateTitle(e.target.value)}
-              className="mt-1"
-            />
+            <label htmlFor="pa-script-title" className="text-gray-600 text-sm">本集名称</label>
+            <Input id="pa-script-title" placeholder="例如：第1集 重逢" value={createTitle} onChange={(event) => setCreateTitle(event.target.value)} className="mt-1" />
           </div>
-          <div>
-            <span className="text-gray-600 text-sm">章节内容（可粘贴剧本）</span>
-            <TextArea
-              rows={6}
-              placeholder="粘贴文学剧本..."
-              value={createContent}
-              onChange={(e) => setCreateContent(e.target.value)}
-              className="mt-1 font-mono text-sm"
-            />
-          </div>
+          <ScriptInput value={createContent} onChange={setCreateContent} onImported={(filename) => { if (!createTitle.trim()) setCreateTitle(filename) }} />
         </div>
       </Modal>
     </Card>

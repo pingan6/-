@@ -9,7 +9,9 @@ COPY front/package.json front/pnpm-lock.yaml ./
 RUN pnpm install --frozen-lockfile
 
 COPY front/ ./
-RUN pnpm run build
+# Keep the compiler within a shared local Docker VM's memory budget; runtime is unaffected.
+ARG FRONTEND_BUILD_MAX_OLD_SPACE_MB=768
+RUN NODE_OPTIONS="--max-old-space-size=${FRONTEND_BUILD_MAX_OLD_SPACE_MB}" pnpm run build
 
 
 FROM nginx:1.27-alpine AS runtime

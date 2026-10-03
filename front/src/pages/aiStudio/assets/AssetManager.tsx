@@ -13,6 +13,7 @@ function isValidTab(tab: string | null): tab is AssetTabKey {
   return tab === 'actor' || tab === 'scene' || tab === 'prop' || tab === 'costume'
 }
 
+// Own the asset-page scroll area inside the fixed-height application shell.
 const AssetManager = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const tabFromUrl = searchParams.get(TAB_PARAM)
@@ -46,9 +47,10 @@ const AssetManager = () => {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="pa-assets min-h-0 flex-1 overflow-y-auto space-y-4" role="region" aria-label="资产管理内容" tabIndex={0}>
       <Card>
         <Tabs
+          className="pa-asset-tabs"
           activeKey={activeTab}
           onChange={(k) => {
             if (isValidTab(k)) setTabInUrl(k)

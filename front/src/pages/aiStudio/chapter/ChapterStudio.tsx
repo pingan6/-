@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useShotDetailSave } from '../hooks/useShotDetailSave'
+import { assertVideoReady } from '../hooks/videoPreflight'
 import {
   Badge,
   Button,
@@ -484,6 +486,7 @@ function useLocalStoragePrefs() {
   return [prefs, setPrefs] as const
 }
 
+/** Three-column generation workspace; visual changes preserve preparation and runtime states. */
 const ChapterStudio: React.FC = () => {
   const { projectId, chapterId } = useParams<{
     projectId?: string
@@ -502,7 +505,8 @@ const ChapterStudio: React.FC = () => {
   const [selectedShotIds, setSelectedShotIds] = useState<string[]>([])
   const locationSelectionAppliedRef = useRef(false)
   const lastSelectedIndexRef = useRef<number>(-1)
-  const [shotDetail, setShotDetail] = useState<ShotDetailRead | null>(null)
+  const detailSave = useShotDetailSave(selectedShotId)
+  const shotDetail = detailSave.detail
   const [dialogLines, setDialogLines] = useState<ShotDialogLineRead[]>([])
   const [frameImages, setFrameImages] = useState<ShotFrameImageRead[]>([])
   const [sceneLinks, setSceneLinks] = useState<ProjectSceneLinkRead[]>([])
@@ -516,6 +520,8 @@ const ChapterStudio: React.FC = () => {
   const [shotDurations, setShotDurations] = useState<Record<string, number>>({})
   const [loadingShots, setLoadingShots] = useState(true)
   const [loadingDetail, setLoadingDetail] = useState(false)
+  const [detailLoadError, setDetailLoadError] = useState(false)
+  const [detailLoadRevision, setDetailLoadRevision] = useState(0)
   const [prefs, setPrefs] = useLocalStoragePrefs()
   const [generating, setGenerating] = useState(false)
   const [batchSkipExtractionUpdating, setBatchSkipExtractionUpdating] = useState(false)
@@ -524,10 +530,7 @@ const ChapterStudio: React.FC = () => {
   const [batchVideoReadinessItems, setBatchVideoReadinessItems] = useState<
     Array<{ shot: StudioShot; readiness: ShotVideoReadinessRead | null; error?: string }>
   >([])
-  const [saving, setSaving] = useState(false)
-  const saveTimerRef = useRef<number | null>(null)
-  const cameraPatchSeqRef = useRef(0)
-  const [cameraUpdating, setCameraUpdating] = useState(false)
+  const cameraUpdating = detailSave.status === 'saving'
   const [promptAssetsUpdating, setPromptAssetsUpdating] = useState(false)
 
   const [frameTab, setFrameTab] = useState<'head' | 'keyframes' | 'tail' | 'compare'>('keyframes')
@@ -771,9 +774,9 @@ const ChapterStudio: React.FC = () => {
   }, [chapterId, location.state, projectId])
 
   useEffect(() => {
+    setDetailLoadError(false)
     if (!selectedShotId) {
       shotCandidatesRequestSeqRef.current += 1
-      setShotDetail(null)
       setDialogLines([])
       setFrameImages([])
       setSceneLinks([])
@@ -862,8 +865,7 @@ const ChapterStudio: React.FC = () => {
     ])
       .then(([detail, dialogs, frames, scenes, actors, props, costumes, shotCharacters, candidates, dialogueCandidates]) => {
         if (reqSeq !== shotCandidatesRequestSeqRef.current) return
-        setShotDetail(detail)
-        lastSavedDetailRef.current = detail
+        detailSave.bind(detail)
         setDialogLines(dialogs)
         setFrameImages(frames)
         setSceneLinks(scenes)
@@ -879,13 +881,14 @@ const ChapterStudio: React.FC = () => {
       })
       .catch(() => {
         if (reqSeq !== shotCandidatesRequestSeqRef.current) return
+        setDetailLoadError(true)
         message.error('加载分镜详情失败')
       })
       .finally(() => {
         if (reqSeq !== shotCandidatesRequestSeqRef.current) return
         setLoadingDetail(false)
       })
-  }, [selectedShotId])
+  }, [selectedShotId, detailLoadRevision])
 
   useEffect(() => {
     // 选中分镜时同步多选的“主选中项”
@@ -1434,107 +1437,28 @@ const ChapterStudio: React.FC = () => {
     [currentFrameFileId],
   )
 
-  // 选中分镜后若开启自动展开属性面板：默认展开（尤其是未就绪分镜）
+  // 自动展开只响应镜头/确认状态或偏好变化，不响应手动收起，避免面板立即弹回。
+  const autoOpenShotId = selectedShot?.id
+  const autoOpenShotStatus = selectedShot?.status
   useEffect(() => {
-    if (!selectedShot) return
-    if (!prefs.autoOpenInspector) return
-    if (prefs.inspectorOpen) return
-    // “若无视频则自动展开”：这里用 status !== ready 作为近似判定
-    if (selectedShot.status !== 'ready') {
-      setPrefs((p) => ({ ...p, inspectorOpen: true }))
-    }
-  }, [prefs.autoOpenInspector, prefs.inspectorOpen, selectedShot, setPrefs])
+    if (!autoOpenShotId || !prefs.autoOpenInspector || autoOpenShotStatus === 'ready') return
+    // 保留原版未就绪镜头自动展开条件，只消除关闭动作导致的循环。
+    setPrefs((p) => p.inspectorOpen ? p : { ...p, inspectorOpen: true })
+  }, [prefs.autoOpenInspector, autoOpenShotId, autoOpenShotStatus, setPrefs])
 
-  const lastSavedDetailRef = useRef<ShotDetailRead | null>(null)
-
+  // 即时与防抖编辑共用队列，失败保留草稿，旧响应不得覆盖新输入。
   const patchShotDetailLocal = (patch: Partial<ShotDetailRead>) => {
-    setShotDetail((prev) => (prev ? { ...prev, ...patch } : prev))
+    detailSave.patch(patch)
   }
 
   const patchShotDetailImmediate = async (patch: Partial<ShotDetailRead>) => {
-    if (!selectedShotId) return
-    patchShotDetailLocal(patch)
-    setCameraUpdating(true)
-    const seq = ++cameraPatchSeqRef.current
-    try {
-      const r: any = await StudioShotDetailsService.updateShotDetailApiV1StudioShotDetailsShotIdPatch({
-        shotId: selectedShotId,
-        requestBody: patch as any,
-      })
-      if (seq !== cameraPatchSeqRef.current) return
-      if (r.data) {
-        setShotDetail(r.data)
-        lastSavedDetailRef.current = r.data
-        if (r.data.duration != null) {
-          setShotDurations((m) => ({ ...m, [selectedShotId]: r.data?.duration ?? 0 }))
-        }
-      }
-    } catch {
-      if (seq !== cameraPatchSeqRef.current) return
-      message.error('镜头语言更新失败')
-    } finally {
-      if (seq === cameraPatchSeqRef.current) setCameraUpdating(false)
-    }
+    await detailSave.patch(patch, true)
   }
 
-  // 自动保存（防抖）：shotDetail 变更后 PATCH 到后端
+  // 时间轴显示当前草稿时长；保存状态独立显示，不将失败伪装成已保存。
   useEffect(() => {
     if (!selectedShotId || !shotDetail) return
-    if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-    setSaving(true)
-    saveTimerRef.current = window.setTimeout(() => {
-      const prev = lastSavedDetailRef.current
-      const next = shotDetail
-      const patch: Record<string, unknown> = {}
-      const assignIfChanged = <K extends keyof ShotDetailRead>(key: K) => {
-        if (prev?.[key] !== next[key]) patch[key] = next[key] ?? null
-      }
-      assignIfChanged('scene_id')
-      // 镜头语言字段（camera_shot/angle/movement/duration）走即时更新，不在此处防抖提交
-      // array / object fields
-      if (JSON.stringify(prev?.mood_tags ?? null) !== JSON.stringify(next.mood_tags ?? null)) patch.mood_tags = next.mood_tags ?? null
-      assignIfChanged('atmosphere')
-      assignIfChanged('follow_atmosphere')
-      assignIfChanged('has_bgm')
-      assignIfChanged('override_video_ratio')
-      assignIfChanged('vfx_type')
-      assignIfChanged('vfx_note')
-      assignIfChanged('first_frame_prompt')
-      assignIfChanged('key_frame_prompt')
-      assignIfChanged('last_frame_prompt')
-
-      const keys = Object.keys(patch)
-      if (keys.length === 0) {
-        setSaving(false)
-        saveTimerRef.current = null
-        return
-      }
-
-      void StudioShotDetailsService.updateShotDetailApiV1StudioShotDetailsShotIdPatch({
-        shotId: selectedShotId,
-        requestBody: patch as any,
-      })
-        .then((r: any) => {
-          if (r.data) {
-            setShotDetail(r.data)
-            lastSavedDetailRef.current = r.data
-            if (r.data.duration != null) {
-              setShotDurations((m) => ({ ...m, [selectedShotId]: r.data?.duration ?? 0 }))
-            }
-          }
-        })
-        .catch(() => {
-          message.error('自动保存失败')
-        })
-        .finally(() => {
-          setSaving(false)
-          saveTimerRef.current = null
-        })
-    }, 1000)
-    return () => {
-      if (saveTimerRef.current) window.clearTimeout(saveTimerRef.current)
-      saveTimerRef.current = null
-    }
+    setShotDurations((previous) => ({ ...previous, [selectedShotId]: shotDetail.duration ?? 0 }))
   }, [selectedShotId, shotDetail])
 
   // 播放器：同步时间与状态
@@ -2086,7 +2010,7 @@ const ChapterStudio: React.FC = () => {
   }, [selectedShot, subtitleLines, videoTime])
 
   return (
-    <div className={['cs-studio w-full h-full min-h-0 flex flex-col', isResizing ? 'cs-resizing' : ''].join(' ')} ref={containerRef}>
+    <div className={['pa-studio cs-studio w-full h-full min-h-0 flex flex-col', isResizing ? 'cs-resizing' : ''].join(' ')} ref={containerRef}>
       {/* 顶部工具栏（常驻） */}
       <div
         className="cs-topbar flex items-center gap-4 px-4 py-3"
@@ -2105,16 +2029,30 @@ const ChapterStudio: React.FC = () => {
           )}
           <Divider type="vertical" />
           <div className="min-w-0">
-            <div className="font-medium text-gray-900 truncate">{chapterTitle}</div>
+            <div className="pa-eyebrow">视频生成 / 选择镜头后继续</div>
+            <h1 className="pa-studio-title font-medium text-gray-900 truncate">{chapterTitle}</h1>
             <div className="text-xs text-gray-500">
-              {saving ? (
+              {detailLoadError ? (
+                <span className="inline-flex items-center gap-2 text-red-600" role="alert">
+                  镜头详情加载失败
+                  <Button size="small" danger onClick={() => setDetailLoadRevision((previous) => previous + 1)}>重试加载</Button>
+                </span>
+              ) : detailSave.status === 'failed' ? (
+                <span className="inline-flex items-center gap-2 text-red-600" role="alert">
+                  保存失败，草稿仍保留
+                  <Button size="small" danger onClick={() => void detailSave.retry()}>重试保存</Button>
+                </span>
+              ) : detailSave.status === 'saving' ? (
                 <span className="inline-flex items-center gap-1">
                   <ClockCircleOutlined /> 自动保存中…
                 </span>
               ) : (
                 <span className="inline-flex items-center gap-1">
-                  <CheckCircleOutlined /> 已保存
+                  <CheckCircleOutlined /> {shotDetail ? '已保存' : '等待加载镜头'}
                 </span>
+              )}
+              {detailSave.recoveryUnavailable && (
+                <span className="block text-red-600" role="alert">浏览器草稿备份不可用，保存成功前请勿关闭页面。</span>
               )}
             </div>
           </div>
@@ -2125,12 +2063,13 @@ const ChapterStudio: React.FC = () => {
         <div className="flex items-center gap-2 shrink-0">
           <Dropdown menu={{ items: toolbarSettingsItems }} trigger={['click']}>
             <Tooltip title="工作台设置">
-              <Button size="small" icon={<SettingOutlined />} />
+              <Button size="small" aria-label="工作台设置" icon={<SettingOutlined />} />
             </Tooltip>
           </Dropdown>
           <Tooltip title={prefs.inspectorOpen ? '收起属性面板（P / Ctrl/Cmd+I）' : '展开属性面板（P / Ctrl/Cmd+I）'}>
             <Button
               size="small"
+              aria-label={prefs.inspectorOpen ? '收起属性面板' : '展开属性面板'}
               icon={prefs.inspectorOpen ? <DoubleRightOutlined /> : <DoubleLeftOutlined />}
               onClick={() => setPrefs((p) => ({ ...p, inspectorOpen: !p.inspectorOpen }))}
             />
@@ -2422,7 +2361,7 @@ const ChapterStudio: React.FC = () => {
             className="cs-preview-card flex-1 min-h-0"
             bodyStyle={{ height: '100%', minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', gap: 12 }}
           >
-            <div className="flex items-center justify-between gap-2">
+            <div className="pa-preview-toolbar flex items-center justify-between gap-2">
               {showPreviewFrameSegmented ? (
                 <Segmented
                   size="small"
@@ -2438,7 +2377,7 @@ const ChapterStudio: React.FC = () => {
               ) : (
                 <div />
               )}
-              <Space size="small">
+              <Space size="small" wrap>
                 <Select
                   size="small"
                   value={playbackRate}
@@ -2492,7 +2431,7 @@ const ChapterStudio: React.FC = () => {
             <div className="flex-1 min-h-0 overflow-auto flex flex-col gap-8 pr-1">
               <div className="relative">
                 <div className="cs-player-shell">
-                  <div className="aspect-video bg-black rounded overflow-hidden flex items-center justify-center">
+                  <div className="pa-player-stage aspect-video bg-black rounded overflow-hidden flex items-center justify-center">
                   {/* Mock：没有真实视频源时仍可展示播放器结构 */}
                   <video
                     ref={videoRef}
@@ -2510,10 +2449,14 @@ const ChapterStudio: React.FC = () => {
                   )}
                   {selectedShot && !currentPreviewVideoUrl && selectedShot.status !== 'ready' && (
                     <div className="absolute inset-0 flex items-center justify-center">
-                      <Badge
-                        status={shotRuntimeMap[selectedShot.id]?.has_active_tasks ? 'processing' : 'default'}
-                        text={shotRuntimeMap[selectedShot.id]?.has_active_tasks ? '生成中…' : '未生成'}
-                      />
+                      <div className="pa-preview-empty">
+                        <PlayCircleOutlined aria-hidden="true" />
+                        <Badge
+                          status={shotRuntimeMap[selectedShot.id]?.has_active_tasks ? 'processing' : 'default'}
+                          text={shotRuntimeMap[selectedShot.id]?.has_active_tasks ? '生成中…' : '暂无生成视频'}
+                        />
+                        <span>在右侧准备关键帧与视频参数</span>
+                      </div>
                     </div>
                   )}
                   </div>
@@ -2735,8 +2678,8 @@ const ChapterStudio: React.FC = () => {
                 className="absolute top-0 right-0 h-full"
                 style={{
                   width: prefs.rightWidth,
-                  background: '#f9fafc',
-                  borderLeft: '2px solid #cbd5e1',
+                  background: 'var(--cs-right-bg)',
+                  borderLeft: '2px solid var(--cs-divider)',
                   zIndex: 20,
                   boxShadow: '-4px 0 12px rgba(0,0,0,0.06)',
                   display: 'flex',
@@ -2895,6 +2838,7 @@ const ChapterStudio: React.FC = () => {
 
 export default ChapterStudio
 
+/** Full-width generation tabs expose existing controls without taking over extraction confirmation. */
 function Inspector(props: {
   projectId?: string
   chapterId?: string
@@ -2979,7 +2923,8 @@ function Inspector(props: {
   const [useBoneDepth, setUseBoneDepth] = useState(false)
   const [audioMode, setAudioMode] = useState<'none' | 'prompt' | 'upload'>('none')
   const [hideShot, setHideShot] = useState(false)
-  const [inspectorTabKey, setInspectorTabKey] = useState<InspectorTabKey>('camera')
+  const [inspectorTabKey, setInspectorTabKey] = useState<InspectorTabKey>('gen_ref')
+  const [advancedInspector, setAdvancedInspector] = useState(false)
   const [sceneNameMap, setSceneNameMap] = useState<Record<string, string>>({})
   const [characterNameMap, setCharacterNameMap] = useState<Record<string, string>>({})
   const [linkRoleOpen, setLinkRoleOpen] = useState(false)
@@ -3034,6 +2979,7 @@ function Inspector(props: {
   const [videoPromptPreviewOpen, setVideoPromptPreviewOpen] = useState(false)
   const [videoPromptPreviewLoading, setVideoPromptPreviewLoading] = useState(false)
   const [videoPromptPreviewSubmitting, setVideoPromptPreviewSubmitting] = useState(false)
+  const videoSubmitLockRef = useRef(false)
   const [videoPromptContextCollapsed, setVideoPromptContextCollapsed] = useState(true)
   const resolveVideoRatioForRequest = useCallback(() => {
     const shotRatio = String(shotDetail?.override_video_ratio ?? '').trim()
@@ -3087,6 +3033,12 @@ function Inspector(props: {
       if (!ratio) {
         throw new Error('video ratio is required')
       }
+      // 复用服务端准备度，不把信息已确认误当作能够直接生成视频。
+      const readiness = await StudioShotsService.getShotVideoReadinessApiApiV1StudioShotsShotIdVideoReadinessGet({
+        shotId: selectedShot.id,
+        referenceMode: context.referenceMode,
+      })
+      assertVideoReady(readiness.data)
       const created = await FilmService.createVideoGenerationTaskApiV1FilmTasksVideoPost({
         requestBody: {
           shot_id: selectedShot.id,
@@ -3227,13 +3179,9 @@ function Inspector(props: {
   const showGenRefVersions = false
 
   const getInspectorTabForSelectedShot = useCallback(
-    (shot: StudioShot | null): InspectorTabKey => {
-      if (!shot) return 'camera'
-      if (shot.hasProblem) return 'ops'
-      if (!(shot.script_excerpt ?? '').trim() || shot.status !== 'ready') return 'prompt_image'
-      if (shot.status === 'ready') return 'gen_ref'
-      if (!shot.hasSpeech) return 'dialogue'
-      return 'camera'
+    (_shot: StudioShot | null): InspectorTabKey => {
+      // Readiness remains visible in the generation panel; diagnostics stay optional.
+      return 'gen_ref'
     },
     [],
   )
@@ -4282,6 +4230,8 @@ function Inspector(props: {
   }
 
   const submitVideoGeneration = async () => {
+    // 在 React 状态更新前同步拦截第二次点击，避免重复进入提交及清空 loading。
+    if (videoSubmitLockRef.current) return
     if (!selectedShot?.id) {
       message.warning('请先选择一个分镜')
       return
@@ -4295,12 +4245,13 @@ function Inspector(props: {
       message.warning('请输入视频提示词')
       return
     }
+    videoSubmitLockRef.current = true
     setVideoPromptPreviewSubmitting(true)
     try {
       const submitted = await videoPromptDraft.submitNow()
       const taskId = submitted?.taskId
       if (!taskId) {
-        message.error('视频生成任务创建失败：缺少任务 ID')
+        message.error('提交未完成，请查看提示词窗口中的错误说明')
         return
       }
       setVideoTaskId(taskId)
@@ -4317,6 +4268,7 @@ function Inspector(props: {
     } catch {
       message.error('发起视频生成失败')
     } finally {
+      videoSubmitLockRef.current = false
       setVideoPromptPreviewSubmitting(false)
     }
   }
@@ -4708,6 +4660,10 @@ function Inspector(props: {
           </div>
         </div>
         <Space size="small">
+          <Button size="small" type="text" aria-expanded={advancedInspector} onClick={() => {
+            if (advancedInspector && !['gen_ref', 'keyframe_gen'].includes(inspectorTabKey)) setInspectorTabKey('gen_ref')
+            setAdvancedInspector((previous) => !previous)
+          }}>{advancedInspector ? '收起高级设置' : '高级设置'}</Button>
           <Tooltip title="收起">
             <Button size="small" type="text" icon={<DoubleRightOutlined />} onClick={onClose} />
           </Tooltip>
@@ -4716,7 +4672,7 @@ function Inspector(props: {
 
       <div className="cs-inspector flex-1 min-h-0 overflow-auto">
         <Tabs
-          tabPosition="left"
+          tabPosition="top"
           activeKey={inspectorTabKey}
           onChange={(activeKey) => setInspectorTabKey(activeKey as InspectorTabKey)}
           items={(() => {
@@ -5591,7 +5547,8 @@ function Inspector(props: {
               av: 6,
             }
 
-            return items.sort((a, b) => (order[String(a.key)] ?? 999) - (order[String(b.key)] ?? 999))
+            return items.filter((item) => advancedInspector || ['gen_ref', 'keyframe_gen'].includes(String(item.key)))
+              .sort((a, b) => (order[String(a.key)] ?? 999) - (order[String(b.key)] ?? 999))
           })()}
         />
 
@@ -6273,6 +6230,11 @@ function Inspector(props: {
           width={900}
           destroyOnClose
         >
+          {videoPromptDraft.error && (
+            <div className="mb-3 rounded-lg border border-red-200 bg-red-50 p-3 text-red-700" role="alert">
+              {videoPromptDraft.error}
+            </div>
+          )}
           {videoPromptPreviewLoading ? (
             <div className="py-8 text-center">
               <Spin />

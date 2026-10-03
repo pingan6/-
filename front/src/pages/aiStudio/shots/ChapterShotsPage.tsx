@@ -57,9 +57,11 @@ function getErrorMessage(e: unknown) {
 }
 
 function statusTag(status?: ShotStatus) {
+  // Translate the existing extraction status without changing the stored business value.
   if (!status) return <span className="text-gray-400">—</span>
   const color = status === 'ready' ? 'success' : 'default'
-  return <Tag color={color}>{status}</Tag>
+  const labels: Record<ShotStatus, string> = { pending: '待确认', generating: '生成中', ready: '已就绪' }
+  return <Tag color={color}>{labels[status]}</Tag>
 }
 
 type ShotPreparationState = {
@@ -566,15 +568,15 @@ export function ChapterShotsPage() {
             <Button
               type="primary"
               icon={<FileSearchOutlined />}
-              onClick={() => navigate(getChapterStudioPath(projectId, chapterId))}
+              onClick={() => navigate(`/projects/${projectId}?tab=roles&chapterId=${chapterId}`)}
             >
-              进入分镜工作室
+              下一步：准备资产图
             </Button>
             <Button
               icon={<VideoCameraOutlined />}
               onClick={() => navigate(getChapterStudioPath(projectId, chapterId))}
             >
-              继续当前镜头
+              视频生成
             </Button>
           </Space>
         ) : null}

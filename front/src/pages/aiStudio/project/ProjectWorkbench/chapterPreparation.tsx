@@ -16,6 +16,7 @@ export type ChapterPreparationState = {
   primaryIcon: ReactNode
 }
 
+/** Recommend a destination without treating chapter status as video readiness. */
 export function getChapterPreparationState(chapter: Chapter): ChapterPreparationState {
   const hasRawText = !!chapter.rawText?.trim()
   const hasShots = (chapter.storyboardCount ?? 0) > 0
@@ -24,37 +25,37 @@ export function getChapterPreparationState(chapter: Chapter): ChapterPreparation
       key: 'edit_raw',
       text: '待录入原文',
       color: 'default',
-      hint: '先补章节原文，再进入分镜流程',
-      primaryAction: '编辑原文',
+      hint: '先保存本集剧本，再拆分镜',
+      primaryAction: '补充剧本',
       primaryIcon: <EditOutlined />,
     }
   }
   if (!hasShots) {
     return {
       key: 'extract_shots',
-      text: '待提取分镜',
+      text: '待拆分镜',
       color: 'gold',
-      hint: '已有章节原文，下一步建议先提取分镜',
-      primaryAction: '提取分镜',
+      hint: '剧本已保存，可以开始拆分镜',
+      primaryAction: '下一步：拆分镜',
       primaryIcon: <ScissorOutlined />,
     }
   }
   if (chapter.status === 'shooting' || chapter.status === 'done') {
     return {
       key: 'shoot',
-      text: '可进入拍摄',
+      text: '已有分镜',
       color: 'green',
-      hint: '当前章节已具备分镜，可继续进入拍摄',
-      primaryAction: '进入拍摄',
+      hint: '进入视频页后，仍需检查素材和生成条件',
+      primaryAction: '进入视频生成',
       primaryIcon: <VideoCameraOutlined />,
     }
   }
   return {
     key: 'prepare_shots',
-    text: '待准备镜头',
+    text: '待检查分镜',
     color: 'blue',
-    hint: '已有分镜，建议先进入分镜工作室补齐镜头准备',
-    primaryAction: '进入分镜工作室',
+    hint: '检查并确认镜头信息，再准备资产图',
+    primaryAction: '查看与确认分镜',
     primaryIcon: <FileSearchOutlined />,
   }
 }

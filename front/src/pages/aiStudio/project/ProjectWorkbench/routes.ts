@@ -1,5 +1,6 @@
 export function getProjectChaptersPath(projectId: string) {
-  return `/projects/${projectId}/chapters`
+  // Chapter management is a project tab, not a separate route.
+  return `/projects/${projectId}?tab=chapters`
 }
 
 export function getChapterStudioPath(projectId: string, chapterId: string) {
@@ -17,4 +18,3 @@ export function getChapterShotEditPath(projectId: string, chapterId: string, sho
 export function getProjectEditorPath(projectId: string) {
   return `/projects/${projectId}/editor`
 }
-

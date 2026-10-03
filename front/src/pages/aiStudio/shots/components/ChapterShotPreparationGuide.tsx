@@ -17,6 +17,7 @@ type ChapterShotPreparationGuideProps = {
   onGoToStudio: () => void
 }
 
+/** Explain confirmation before generation without conflating it with video readiness. */
 export function ChapterShotPreparationGuide({
   statusReady,
   checklistItems,
@@ -32,7 +33,7 @@ export function ChapterShotPreparationGuide({
   )
 
   const summaryText = statusReady
-    ? '已完成准备，可进入工作室继续生成。'
+    ? '信息确认完成；资产图和视频生成条件仍需检查。'
     : `还有 ${warningCount} 项待处理，建议先继续完成准备。`
 
   return (
@@ -68,7 +69,7 @@ export function ChapterShotPreparationGuide({
               size="small"
               onClick={onGoToStudio}
             >
-              进入工作室
+              查看视频准备度
             </Button>
           </Tooltip>
         </div>

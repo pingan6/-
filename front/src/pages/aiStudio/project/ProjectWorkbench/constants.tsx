@@ -14,6 +14,8 @@ import type { Chapter } from '../../../../mocks/data'
 export type TabKey =
   | 'dashboard'
   | 'chapters'
+  | 'shots'
+  | 'videos'
   | 'actors'
   | 'roles'
   | 'scenes'
@@ -26,6 +28,8 @@ export type TabKey =
 const TAB_KEYS: TabKey[] = [
   'dashboard',
   'chapters',
+  'shots',
+  'videos',
   'actors',
   'roles',
   'scenes',
@@ -40,11 +44,13 @@ export function isTabKey(s: string): s is TabKey {
   return TAB_KEYS.includes(s as TabKey)
 }
 
-export const DEFAULT_TAB: TabKey = 'dashboard'
+export const DEFAULT_TAB: TabKey = 'chapters'
 
 export const TAB_CONFIG: { key: TabKey; label: string; icon: React.ReactNode }[] = [
   { key: 'dashboard', label: '仪表盘', icon: <HomeOutlined /> },
   { key: 'chapters', label: '章节', icon: <UnorderedListOutlined /> },
+  { key: 'shots', label: '拆分镜', icon: <ScissorOutlined /> },
+  { key: 'videos', label: '视频生成', icon: <VideoCameraOutlined /> },
   { key: 'actors', label: '演员', icon: <UserOutlined /> },
   { key: 'roles', label: '角色', icon: <UserOutlined /> },
   { key: 'scenes', label: '场景', icon: <PictureOutlined /> },
@@ -60,4 +66,3 @@ export const chapterStatusMap: Record<Chapter['status'], { color: string; text: 
   shooting: { color: 'processing', text: '拍摄中' },
   done: { color: 'success', text: '完成' },
 }
-

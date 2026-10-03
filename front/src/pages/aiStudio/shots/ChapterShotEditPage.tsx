@@ -196,6 +196,7 @@ export function ChapterShotEditPage() {
   const [title, setTitle] = useState('')
   const [scriptExcerpt, setScriptExcerpt] = useState('')
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [semanticSaving, setSemanticSaving] = useState(false)
   const [preparationState, setPreparationState] = useState<ShotPreparationStateRead | null>(null)
@@ -330,6 +331,7 @@ export function ChapterShotEditPage() {
   const loadPage = useCallback(async () => {
     if (!chapterId || !shotId || !projectId) return
     setLoading(true)
+    setLoadError(null)
     setDialogLoading(true)
     try {
       const [projectRes, chRes, listRes, preparationRes, detailRes] = await Promise.all([
@@ -385,9 +387,12 @@ export function ChapterShotEditPage() {
       setExtractedDialogLines(
         (preparationState?.dialogue_candidates ?? []).filter((item) => item.candidate_status === 'pending'),
       )
-    } catch {
-      message.error('加载失败')
-      navigate(getChapterShotsPath(projectId, chapterId), { replace: true })
+    } catch (error) {
+      // Keep failures visible and retryable instead of hiding missing dependencies behind a redirect.
+      const status = typeof error === 'object' && error !== null && 'status' in error ? error.status : undefined
+      setLoadError(status === 404
+        ? '镜头或其准备资料不存在（HTTP 404），请检查镜头细节记录。系统不会自动补造数据。'
+        : '镜头准备资料加载失败，请检查服务连接后重试。')
     } finally {
       setDialogLoading(false)
       setLoading(false)
@@ -1210,9 +1215,9 @@ export function ChapterShotEditPage() {
   const goToStudio = () => navigate(getChapterStudioPath(projectId, chapterId), {
     state: { focusShotId: shotId, selectedShotIds: shotId ? [shotId] : [] },
   })
-  const nextStepTitle = statusReady ? '下一步：进入分镜工作室继续生成' : '下一步：先完成镜头准备，再进入工作室'
+  const nextStepTitle = statusReady ? '分镜信息已确认：准备资产图后继续视频生成' : '先确认镜头信息，再准备资产图'
   const nextStepDescription = statusReady
-    ? '当前镜头的信息提取确认已经完成，接下来更适合去分镜工作室继续关键帧、参考图、视频提示词和视频生成。'
+    ? '可从顶部“资产图”准备人物与场景图片；已有素材时，可直接进入视频生成检查准备度。'
     : actionBeatsReady
       ? '当前镜头仍有提取候选、对白或镜头基础信息待确认。先在这里完成准备，准备完成后再进入分镜工作室继续生成。'
       : '当前镜头的动作拍点还没有确认。建议先补齐动作序列，再进入工作室继续关键帧和视频生成。'
@@ -1536,6 +1541,12 @@ export function ChapterShotEditPage() {
           {loading ? (
             <div className="flex-1 flex items-center justify-center min-h-[200px]">
               <Spin size="large" />
+            </div>
+          ) : loadError ? (
+            <div className="flex-1 min-h-0 overflow-auto py-6" role="alert">
+              <Empty description={loadError}>
+                <Button icon={<ReloadOutlined />} onClick={() => void loadPage()}>重试加载</Button>
+              </Empty>
             </div>
           ) : !shot ? (
             <Empty description="无法加载分镜" />
