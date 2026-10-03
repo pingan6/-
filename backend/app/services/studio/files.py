@@ -148,7 +148,9 @@ async def upload_file(
     display_name = _build_display_name(file.filename, name)
     content = await file.read()
 
-    key = f"files/{file.filename}"
+    # Names are display metadata, not object identities: repeated uploads must not overwrite history.
+    safe_filename = Path(file.filename.replace("\\", "/")).name
+    key = f"files/{uuid.uuid4()}/{safe_filename}"
     info = await storage.upload_file(
         key=key,
         data=content,

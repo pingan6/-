@@ -18,6 +18,38 @@ from app.schemas.studio.files import FileUpdate
 from app.services.studio.files import get_file_detail, list_files_paginated, update_file_meta
 
 
+@pytest.mark.asyncio
+async def test_same_filename_uploads_preserve_independent_objects(monkeypatch) -> None:
+    """Repeated names and client paths cannot overwrite an earlier upload's content."""
+    from io import BytesIO
+    from types import SimpleNamespace
+    from fastapi import UploadFile
+    from app.services.studio import files
+
+    objects = {}
+
+    async def upload(*, key, data, **_kwargs):
+        """Simulate object storage, where the same key would overwrite prior bytes."""
+        objects[key] = data
+        return SimpleNamespace(url=f"https://storage.invalid/{key}")
+
+    monkeypatch.setattr(files.storage, "upload_file", upload)
+    db, engine = await _build_session()
+    async with db:
+        first = await files.upload_file(db, file=UploadFile(filename="../poster.png", file=BytesIO(b"first")))
+        second = await files.upload_file(db, file=UploadFile(filename="C:\\images\\poster.png", file=BytesIO(b"second")))
+        await db.commit()
+        assert first.id != second.id
+        assert first.storage_key != second.storage_key
+        assert objects[first.storage_key] == b"first"
+        assert objects[second.storage_key] == b"second"
+        for key in objects:
+            assert key.startswith("files/")
+            assert key.endswith("/poster.png")
+            assert ".." not in key and "\\" not in key and "C:" not in key
+    await engine.dispose()
+
+
 async def _build_session() -> tuple[AsyncSession, object]:
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", future=True)
     session_local = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
