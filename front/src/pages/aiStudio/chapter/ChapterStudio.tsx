@@ -1458,7 +1458,7 @@ const ChapterStudio: React.FC = () => {
 
   // 时间轴显示当前草稿时长；保存状态独立显示，不将失败伪装成已保存。
   useEffect(() => {
-    if (!selectedShotId || !shotDetail) return
+    if (!selectedShotId || !shotDetail || shotDetail.id !== selectedShotId) return
     setShotDurations((previous) => ({ ...previous, [selectedShotId]: shotDetail.duration ?? 0 }))
   }, [selectedShotId, shotDetail])
 

@@ -21,6 +21,10 @@ test('selected shot metadata never leaks onto another shot card', () => {
   assert.deepEqual(shotCardMetadata('other', { other: 8 }, detail), { movement: null, duration: 8 })
   assert.deepEqual(shotCardMetadata('selected', {}, null), { movement: null, duration: 0 })
 })
+test('duration cache refuses detail belonging to the previous selection', async () => {
+  const source = await readFile(new URL('../src/pages/aiStudio/chapter/ChapterStudio.tsx', import.meta.url), 'utf8')
+  assert.match(source, /if \(!selectedShotId \|\| !shotDetail \|\| shotDetail\.id !== selectedShotId\) return\s+setShotDurations/)
+})
 // Deferred requests reproduce response races deterministically, rather than relying on sleeps.
 function deferred() {
   let resolve, reject
