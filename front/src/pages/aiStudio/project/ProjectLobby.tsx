@@ -16,6 +16,7 @@ import {
   Space,
   Tag,
   Popconfirm,
+  Alert,
 } from 'antd'
 import {
   PlusOutlined,
@@ -39,6 +40,8 @@ import { getChapterPreparationState } from './ProjectWorkbench/chapterPreparatio
 import { ensureHasShotsBeforeShooting } from './ProjectWorkbench/ensureHasShotsBeforeShooting'
 import { getChapterShotsPath } from './ProjectWorkbench/routes'
 import { loadProjectFlowStatsForChapters, type ProjectFlowStats } from './ProjectWorkbench/projectFlowStats'
+import { backendConfiguration } from '../../../services/openapi'
+import { describeBackendFailure } from '../../../services/backendConfiguration'
 
 type ViewMode = 'grid' | 'compact' | 'large'
 type FilterTab = 'all' | 'editRaw' | 'extractShots' | 'prepareShots' | 'generating' | 'ready'
@@ -64,6 +67,7 @@ const ProjectLobby: React.FC = () => {
   const navigate = useNavigate()
   const [projects, setProjects] = useState<ProjectView[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [showOptions, setShowOptions] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('grid')
@@ -129,19 +133,22 @@ const ProjectLobby: React.FC = () => {
 
   const load = async () => {
     setLoading(true)
+    setLoadError(null)
     try {
       if (useMock) {
         setProjects(mockProjects)
       } else {
+        if (backendConfiguration.error) throw new Error('backend not configured')
         const res = await StudioProjectsService.listProjectsApiV1StudioProjectsGet({
           page: 1,
           pageSize: 10,
         })
+        if (!res.data || !Array.isArray(res.data.items)) throw new Error('invalid project list response')
         const items = res.data?.items ?? []
         setProjects(items.map(toUIProject))
       }
-    } catch {
-      setProjects(useMock ? mockProjects : [])
+    } catch (error) {
+      setLoadError(backendConfiguration.error ?? describeBackendFailure(error))
     } finally {
       setLoading(false)
     }
@@ -370,6 +377,10 @@ const ProjectLobby: React.FC = () => {
   }
 
   const handleOpenCreate = () => {
+    if (!useMock && backendConfiguration.error) {
+      message.error(backendConfiguration.error)
+      return
+    }
     form.resetFields()
     const defaultVisual = (projectStyleOptions.visualStyles[0]?.value ?? '现实') as ProjectVisualStyleChoice
     const defaultStyle =
@@ -395,6 +406,7 @@ const ProjectLobby: React.FC = () => {
     default_video_ratio?: string
   }) => {
     try {
+      if (!useMock && backendConfiguration.error) throw new Error('backend not configured')
       const createdId = newProjectId()
       const res = await StudioProjectsService.createProjectApiV1StudioProjectsPost({
         requestBody: {
@@ -416,8 +428,8 @@ const ProjectLobby: React.FC = () => {
       setCreateModalOpen(false)
       setProjects((prev) => (Array.isArray(prev) ? [...prev, ui] : [ui]))
       navigate(`/projects/${ui.id}`)
-    } catch {
-      message.error('创建失败')
+    } catch (error) {
+      message.error(backendConfiguration.error ?? describeBackendFailure(error))
     }
   }
 
@@ -774,6 +786,9 @@ const ProjectLobby: React.FC = () => {
       </div>
 
       <div className="pa-library-scroll min-h-0 flex-1 overflow-auto">
+      {loadError && <Alert type="error" showIcon message="项目列表未能加载"
+        description={loadError} action={<Button onClick={() => void load()} loading={loading}>重试</Button>}
+        style={{ marginBottom: 16 }} />}
       <div className="pa-library-section-title"><h2>我的项目</h2><span>已保存的创作，随时接着做</span></div>
       <Row gutter={12}>
         <Col xs={24} lg={showOptions ? 18 : 24}>
@@ -783,7 +798,7 @@ const ProjectLobby: React.FC = () => {
                 <PlusOutlined /><strong>添加项目</strong><small>从一份剧本开始创作</small>
               </button>
             </Col>}
-            {!loading && filteredSorted.length === 0 && (
+            {!loading && !loadError && filteredSorted.length === 0 && (
               <Col span={24}>
                 <Card>
                   <div className="text-center text-gray-500 py-8 text-sm">

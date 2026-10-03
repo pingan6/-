@@ -1,4 +1,2 @@
-// 本地开发默认直连本机后端；容器部署时由 Nginx/入口脚本覆盖。
-window.__ENV = window.__ENV || {
-  BACKEND_URL: 'http://localhost:8000',
-}
+// 容器入口可提供运行时地址；默认留空，让构建配置生效，不向公网写入本机地址。
+window.__ENV = window.__ENV || {}

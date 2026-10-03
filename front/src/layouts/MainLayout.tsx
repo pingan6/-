@@ -1,5 +1,5 @@
 import React, { useMemo } from 'react'
-import { Layout, Menu, theme, Dropdown, Space, Avatar, Select, Button } from 'antd'
+import { Layout, Menu, theme, Dropdown, Space, Avatar, Select, Button, Alert } from 'antd'
 import { ArrowLeftOutlined, SettingOutlined, UserOutlined, FolderOutlined, PictureOutlined, FileTextOutlined, ApiOutlined } from '@ant-design/icons'
 import { Link, Outlet, useLocation, useNavigate } from 'react-router-dom'
 import { useAppStore } from '../store/useAppStore'
@@ -10,6 +10,7 @@ import { OnboardingGuide } from '../components/OnboardingGuide'
 import { CreationFlow } from '../components/CreationFlow'
 import { getCreationContext } from '../components/creationFlowRoutes'
 import '../styles/pingan-workspace.css'
+import { backendConfiguration } from '../services/openapi'
 
 const { Header, Content } = Layout
 
@@ -75,6 +76,10 @@ const MainLayout: React.FC = () => {
       <TaskRuntimeProvider>
         <Content className="pa-content" style={{ flex: 1, minHeight: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: token.colorBgLayout }}>
           <CreationFlow />
+          {backendConfiguration.error && <Alert type="warning" showIcon
+            message="当前网站仅完成界面部署"
+            description={backendConfiguration.error}
+            style={{ flexShrink: 0, margin: 16 }} />}
           {/* Natural-height pages scroll here; fitted workspaces continue to own their panel scrolling. */}
           <div className="pa-page-viewport w-full h-full min-h-0 overflow-auto flex flex-col"><Outlet /></div>
         </Content>

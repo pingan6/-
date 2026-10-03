@@ -1,4 +1,5 @@
 import { OpenAPI } from './generated'
+import { resolveBackendConfiguration } from './backendConfiguration'
 
 declare global {
   interface Window {
@@ -21,6 +22,8 @@ export function initOpenAPI(base: string = '') {
 
 const runtimeBackendUrl = window.__ENV?.BACKEND_URL
 const buildtimeBackendUrl = import.meta.env.VITE_BACKEND_URL
-const defaultBackendUrl = 'http://localhost:8000'
+export const backendConfiguration = resolveBackendConfiguration(
+  window.location.hostname, window.location.protocol, runtimeBackendUrl, buildtimeBackendUrl,
+)
 
-initOpenAPI(runtimeBackendUrl ?? buildtimeBackendUrl ?? defaultBackendUrl)
+initOpenAPI(backendConfiguration.base)
