@@ -25,10 +25,10 @@ test('platform branding is 平安科技 in both locales and the browser title', 
   }
   const html = await readFile(new URL('../index.html', import.meta.url), 'utf8')
   assert.match(html, /<title>平安科技<\/title>/)
-  assert.match(html, /href="\/pingan-mark.svg"/)
+  assert.match(html, /href="\/pingan-mark-pa-v1.png"/)
   const mainLayout = await readFile(new URL('../src/layouts/MainLayout.tsx', import.meta.url), 'utf8')
   const lobby = await readFile(new URL('../src/pages/aiStudio/project/ProjectLobby.tsx', import.meta.url), 'utf8')
-  assert.match(mainLayout, /alt="平安科技"/)
+  assert.match(mainLayout, /alt="平安科技 PA 商标"/)
   assert.ok(lobby.includes('平安科技 · 创作项目'))
   assert.ok(lobby.includes('平安科技 / 创作空间'))
   assert.ok(!lobby.includes('平安剧场'))

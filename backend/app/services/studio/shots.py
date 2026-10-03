@@ -11,6 +11,7 @@ from app.api.utils import apply_keyword_filter, apply_order, paginate
 from app.models.studio import (
     Chapter,
     Shot,
+    ShotDetail,
     ShotCandidateStatus,
     ShotDialogueCandidateStatus,
     ShotExtractedCandidate,
@@ -204,10 +205,14 @@ async def create(
     *,
     body: ShotCreate,
 ) -> Shot:
-    """创建镜头。"""
+    """Create the shot and explicitly supplied director details in one request transaction."""
     await ensure_not_exists(db, Shot, body.id, detail=entity_already_exists("Shot"))
     await require_entity(db, Chapter, body.chapter_id, detail=entity_not_found("Chapter"), status_code=400)
-    return await create_and_refresh(db, Shot(**body.model_dump()))
+    shot = await create_and_refresh(db, Shot(**body.model_dump(exclude={"detail"})))
+    if body.detail is not None:
+        # The request dependency commits both rows together; detail failure rolls back the shot.
+        await create_and_refresh(db, ShotDetail(id=shot.id, **body.detail.model_dump()))
+    return shot
 
 
 async def get(

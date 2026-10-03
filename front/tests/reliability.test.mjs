@@ -4,15 +4,23 @@ import { readFile } from 'node:fs/promises'
 import { after, before, test } from 'node:test'
 import { createServer } from 'vite'
 
-let server, DraftSave, GenerationGuard, assertVideoReady
+let server, DraftSave, GenerationGuard, assertVideoReady, shotCardMetadata
 // Exercise the production queue and guard, without HTTP requests or model calls.
 before(async () => {
   server = await createServer({ server: { middlewareMode: true, hmr: { server: createHttpServer() } }, appType: 'custom' })
   ;({ DraftSave } = await server.ssrLoadModule('/src/pages/aiStudio/hooks/draftSave.ts'))
   ;({ GenerationGuard } = await server.ssrLoadModule('/src/pages/aiStudio/hooks/generationGuard.ts'))
   ;({ assertVideoReady } = await server.ssrLoadModule('/src/pages/aiStudio/hooks/videoPreflight.ts'))
+  ;({ shotCardMetadata } = await server.ssrLoadModule('/src/pages/aiStudio/chapter/shotCardMetadata.ts'))
 })
 after(async () => { await server?.close() })
+test('selected shot metadata never leaks onto another shot card', () => {
+  const detail = { id: 'selected', movement: 'STATIC', duration: 3 }
+  assert.deepEqual(shotCardMetadata('selected', {}, detail), { movement: 'STATIC', duration: 3 })
+  assert.deepEqual(shotCardMetadata('other', {}, detail), { movement: null, duration: 0 })
+  assert.deepEqual(shotCardMetadata('other', { other: 8 }, detail), { movement: null, duration: 8 })
+  assert.deepEqual(shotCardMetadata('selected', {}, null), { movement: null, duration: 0 })
+})
 // Deferred requests reproduce response races deterministically, rather than relying on sleeps.
 function deferred() {
   let resolve, reject

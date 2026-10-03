@@ -53,8 +53,17 @@ class ShotExtractionSummaryRead(BaseModel):
     pending_dialogue_count: int = Field(0, description="待确认对白候选数")
 
 
+class ManualShotDetailInput(BaseModel):
+    """Explicit director choices used for atomic manual shot creation; no inferred facts."""
+
+    camera_shot: CameraShotType
+    angle: CameraAngle
+    movement: CameraMovement
+    duration: int = Field(0, ge=0)
+
+
 class ShotCreate(ShotBase):
-    pass
+    detail: ManualShotDetailInput | None = Field(None, description="导演填写的镜头细节；与镜头原子保存")
 
 
 class ShotUpdate(BaseModel):

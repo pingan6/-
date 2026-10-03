@@ -87,6 +87,23 @@ class _FakeShotSubresourceDB:
     async def flush(self) -> None:
         return None
 
+    async def execute(self, statement):
+        """Model the no-candidate fixture without silently accepting unrelated queries."""
+        from app.models.studio import ShotExtractedDialogueCandidate
+        assert statement.column_descriptions[0]["entity"] is ShotExtractedDialogueCandidate
+
+        class EmptyCandidates:
+            """The fixture contains manually entered dialogue, not extracted candidates."""
+            def scalars(self):
+                """Return the scalar result facade."""
+                return self
+
+            def first(self):
+                """There is no linked candidate to reset."""
+                return None
+
+        return EmptyCandidates()
+
     async def refresh(self, obj: object) -> None:
         now = datetime.now(UTC)
         if getattr(obj, "created_at", None) is None:

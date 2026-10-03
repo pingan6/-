@@ -54,6 +54,9 @@ services:
       S3_PUBLIC_BASE_URL: "http://127.0.0.1:${RUSTFS_PORT:-9002}/${S3_BUCKET_NAME}"
     restart: unless-stopped
   front:
+    # Preserve the local API address even when frontend static assets are refreshed.
+    volumes:
+      - ../local/frontend-env.js:/usr/share/nginx/html/env.js:ro
     ports: !override
       - "127.0.0.1:7788:80"
     restart: unless-stopped

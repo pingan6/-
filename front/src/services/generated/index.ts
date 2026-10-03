@@ -117,6 +117,7 @@ export type { GenerationTaskLinkUpdate } from './models/GenerationTaskLinkUpdate
 export type { HTTPValidationError } from './models/HTTPValidationError';
 export type { ImageGenerationOptionsRead } from './models/ImageGenerationOptionsRead';
 export type { LogLevel } from './models/LogLevel';
+export type { ManualShotDetailInput } from './models/ManualShotDetailInput';
 export type { ModelCategoryKey } from './models/ModelCategoryKey';
 export type { ModelCreate } from './models/ModelCreate';
 export type { ModelRead } from './models/ModelRead';

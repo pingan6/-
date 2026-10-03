@@ -6,6 +6,8 @@ import {
   Empty,
   Form,
   Input,
+  InputNumber,
+  Select,
   Layout,
   Modal,
   Popconfirm,
@@ -29,7 +31,8 @@ import {
   ScissorOutlined,
   VideoCameraOutlined,
 } from '@ant-design/icons'
-import type { ShotRead, ShotRuntimeSummaryRead, ShotStatus } from '../../../services/generated'
+import type { ShotRead, ShotRuntimeSummaryRead, ShotStatus, CameraShotType, CameraAngle, CameraMovement } from '../../../services/generated'
+import { CAMERA_SHOT_OPTIONS, CAMERA_ANGLE_OPTIONS, CAMERA_MOVEMENT_OPTIONS } from './components/ChapterShotBasicInfoSection'
 import { ScriptProcessingService, StudioChaptersService, StudioShotsService } from '../../../services/generated'
 import { executeAsyncTaskCreate, executeTaskCancel } from '../components/taskActionHelpers'
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom'
@@ -124,7 +127,7 @@ export function ChapterShotsPage() {
   const [batchDeleting, setBatchDeleting] = useState(false)
   const [createOpen, setCreateOpen] = useState(false)
   const [createSubmitting, setCreateSubmitting] = useState(false)
-  const [createForm] = Form.useForm<{ title: string; script_excerpt?: string }>()
+  const [createForm] = Form.useForm<{ title: string; script_excerpt?: string; camera_shot: CameraShotType; angle: CameraAngle; movement: CameraMovement; duration?: number }>()
   const [chapterDivisionTaskLoading, setChapterDivisionTaskLoading] = useState(false)
 
   const refresh = async () => {
@@ -264,6 +267,7 @@ export function ChapterShotsPage() {
           title: v.title.trim(),
           script_excerpt: v.script_excerpt?.trim() ? v.script_excerpt.trim() : '',
           status: 'pending',
+          detail: { camera_shot: v.camera_shot, angle: v.angle, movement: v.movement, duration: v.duration ?? 0 },
         },
       })
       const created = res.data
@@ -759,6 +763,18 @@ export function ChapterShotsPage() {
           </Form.Item>
           <Form.Item name="script_excerpt" label="剧本摘录">
             <Input.TextArea rows={8} placeholder="可选" />
+          </Form.Item>
+          <Form.Item name="camera_shot" label="景别" rules={[{ required: true, message: '请选择景别' }]}>
+            <Select options={CAMERA_SHOT_OPTIONS} placeholder="由导演选择" />
+          </Form.Item>
+          <Form.Item name="angle" label="机位角度" rules={[{ required: true, message: '请选择机位角度' }]}>
+            <Select options={CAMERA_ANGLE_OPTIONS} placeholder="由导演选择" />
+          </Form.Item>
+          <Form.Item name="movement" label="运镜" rules={[{ required: true, message: '请选择运镜' }]}>
+            <Select options={CAMERA_MOVEMENT_OPTIONS} placeholder="由导演选择" />
+          </Form.Item>
+          <Form.Item name="duration" label="时长（秒，未确定可留空）">
+            <InputNumber min={0} precision={0} />
           </Form.Item>
         </Form>
       </Modal>

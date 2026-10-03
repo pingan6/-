@@ -2,6 +2,7 @@
 /* istanbul ignore file */
 /* tslint:disable */
 /* eslint-disable */
+import type { ManualShotDetailInput } from './ManualShotDetailInput';
 import type { ShotStatus } from './ShotStatus';
 export type ShotCreate = {
     /**
@@ -40,5 +41,9 @@ export type ShotCreate = {
      * 已生成视频关联的文件 ID（files.id，type=video）
      */
     generated_video_file_id?: (string | null);
+    /**
+     * 导演填写的镜头细节；与镜头原子保存
+     */
+    detail?: (ManualShotDetailInput | null);
 };
 

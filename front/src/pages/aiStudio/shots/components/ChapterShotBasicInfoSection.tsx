@@ -2,7 +2,7 @@ import { Button, Input, InputNumber, Select, Tag } from 'antd'
 import { SaveOutlined } from '@ant-design/icons'
 import type { ActionBeatPhaseRead, CameraAngle, CameraMovement, CameraShotType } from '../../../../services/generated'
 
-const CAMERA_SHOT_OPTIONS: Array<{ value: CameraShotType; label: string }> = [
+export const CAMERA_SHOT_OPTIONS: Array<{ value: CameraShotType; label: string }> = [
   { value: 'ECU', label: '大特写' },
   { value: 'CU', label: '特写' },
   { value: 'MCU', label: '中近景' },
@@ -12,7 +12,7 @@ const CAMERA_SHOT_OPTIONS: Array<{ value: CameraShotType; label: string }> = [
   { value: 'ELS', label: '大远景' },
 ]
 
-const CAMERA_ANGLE_OPTIONS: Array<{ value: CameraAngle; label: string }> = [
+export const CAMERA_ANGLE_OPTIONS: Array<{ value: CameraAngle; label: string }> = [
   { value: 'EYE_LEVEL', label: '平视' },
   { value: 'HIGH_ANGLE', label: '高角度' },
   { value: 'LOW_ANGLE', label: '低角度' },
@@ -21,7 +21,7 @@ const CAMERA_ANGLE_OPTIONS: Array<{ value: CameraAngle; label: string }> = [
   { value: 'OVER_SHOULDER', label: '过肩' },
 ]
 
-const CAMERA_MOVEMENT_OPTIONS: Array<{ value: CameraMovement; label: string }> = [
+export const CAMERA_MOVEMENT_OPTIONS: Array<{ value: CameraMovement; label: string }> = [
   { value: 'STATIC', label: '固定镜头' },
   { value: 'PAN', label: '平移' },
   { value: 'TILT', label: '俯仰' },

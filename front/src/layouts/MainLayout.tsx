@@ -53,7 +53,7 @@ const MainLayout: React.FC = () => {
           location.pathname === `/projects/${context.projectId}` ? '/projects' : `/projects/${context.projectId}`
         )}><span>返回</span></Button>}
         <Link to="/projects" className="pa-brand" aria-label="平安科技首页">
-          <img src="/pingan-mark.svg" alt="平安科技" width={32} height={32} />
+          <img src="/pingan-mark-pa-v1.png" alt="平安科技 PA 商标" width={40} height={40} />
           <span>{t('title')}</span>
         </Link>
         <Menu className="pa-main-nav" mode="horizontal" selectedKeys={selectedKeys} items={menuItems} />

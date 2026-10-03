@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useShotDetailSave } from '../hooks/useShotDetailSave'
 import { assertVideoReady } from '../hooks/videoPreflight'
+import { shotCardMetadata } from './shotCardMetadata'
 import {
   Badge,
   Button,
@@ -2257,8 +2258,8 @@ const ChapterStudio: React.FC = () => {
                                 )}
                               </div>
                               <div className="text-xs text-gray-500 mt-1 truncate">
-                                {shotDetail?.movement ? `${CAMERA_MOVEMENT_OPTIONS.find((x) => x.value === shotDetail.movement)?.label ?? shotDetail.movement} · ` : ''}
-                                {((shotDurations[s.id] ?? shotDetail?.duration ?? 0) || 0).toFixed(1)}s
+                                {shotCardMetadata(s.id, shotDurations, shotDetail).movement ? `${CAMERA_MOVEMENT_OPTIONS.find((x) => x.value === shotCardMetadata(s.id, shotDurations, shotDetail).movement)?.label ?? shotCardMetadata(s.id, shotDurations, shotDetail).movement} · ` : ''}
+                                {shotCardMetadata(s.id, shotDurations, shotDetail).duration.toFixed(1)}s
                               </div>
                               <div className="cs-shot-progress mt-1">
                                 <div className="cs-shot-progress__dots" aria-hidden="true">
