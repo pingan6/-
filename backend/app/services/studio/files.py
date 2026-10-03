@@ -20,7 +20,7 @@ from app.models.studio import FileItem, FileType
 from app.schemas.common import ApiResponse, PaginatedData, paginated_response
 from app.schemas.studio import FileDetailRead, FileRead, FileUpdate, FileUsageRead, FileUsageWrite
 from app.services.common import create_and_refresh, entity_not_found, flush_and_refresh, get_or_404, patch_model
-from app.services.studio.file_usages import upsert_file_usage
+from app.services.studio.file_usages import upsert_file_usage, validate_file_usage_scope
 
 FILE_ORDER_FIELDS = {"name", "created_at", "updated_at"}
 
@@ -143,6 +143,12 @@ async def upload_file(
     """上传文件到对象存储，并创建 FileItem 记录。"""
     if not file.filename:
         raise HTTPException(status_code=400, detail="上传文件缺少文件名")
+
+    # Reject invalid scope before uploading bytes, not after creating an orphan storage object.
+    if project_id is not None:
+        await validate_file_usage_scope(db, project_id=project_id, chapter_id=chapter_id, shot_id=shot_id)
+    elif chapter_id is not None or shot_id is not None:
+        raise HTTPException(400, "project_id is required for chapter_id or shot_id")
 
     file_type = _detect_file_type(file.filename)
     display_name = _build_display_name(file.filename, name)

@@ -19,6 +19,59 @@ from app.services.studio.files import get_file_detail, list_files_paginated, upd
 
 
 @pytest.mark.asyncio
+async def test_file_usage_rejects_cross_project_and_cross_chapter_references() -> None:
+    """Foreign keys alone cannot protect the hierarchy; mismatched valid IDs must fail."""
+    from fastapi import HTTPException
+    from app.services.studio.file_usages import validate_file_usage_scope
+
+    db, engine = await _build_session()
+    async with db:
+        await _seed_scope_graph(db)
+        db.add_all([
+            Project(id="p2", name="Other", description="", style=ProjectStyle.real_people_city, visual_style=ProjectVisualStyle.live_action),
+            Chapter(id="c2", project_id="p2", index=1, title="Other"),
+            Chapter(id="c3", project_id="p1", index=2, title="Same project, different chapter"),
+            Shot(id="s2", chapter_id="c2", index=1, title="Other"),
+        ])
+        await db.commit()
+        await validate_file_usage_scope(db, project_id="p1", chapter_id="c1", shot_id="s1")
+        await validate_file_usage_scope(db, project_id="p1", chapter_id=None, shot_id="s1")
+        for project_id, chapter_id, shot_id in [
+            ("missing", None, None), ("p1", "missing", None), ("p1", None, "missing"),
+            ("p1", "c2", None), ("p1", None, "s2"), ("p1", "c3", "s1"),
+        ]:
+            with pytest.raises(HTTPException) as exc:
+                await validate_file_usage_scope(db, project_id=project_id, chapter_id=chapter_id, shot_id=shot_id)
+            assert exc.value.status_code == 400
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+async def test_invalid_upload_scope_never_writes_storage(monkeypatch) -> None:
+    """Invalid references must be rejected before remote storage side effects."""
+    from io import BytesIO
+    from fastapi import HTTPException, UploadFile
+    from app.services.studio import files
+
+    calls = []
+
+    async def upload(**kwargs):
+        """An invalid request must never reach this storage replacement."""
+        calls.append(kwargs)
+        raise AssertionError("unexpected storage write")
+
+    monkeypatch.setattr(files.storage, "upload_file", upload)
+    db, engine = await _build_session()
+    async with db:
+        for kwargs in [{"project_id": "missing"}, {"chapter_id": "c1"}, {"shot_id": "s1"}]:
+            with pytest.raises(HTTPException) as exc:
+                await files.upload_file(db, file=UploadFile(filename="image.png", file=BytesIO(b"image")), **kwargs)
+            assert exc.value.status_code == 400
+        assert calls == []
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_same_filename_uploads_preserve_independent_objects(monkeypatch) -> None:
     """Repeated names and client paths cannot overwrite an earlier upload's content."""
     from io import BytesIO

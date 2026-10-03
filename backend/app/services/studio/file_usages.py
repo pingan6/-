@@ -4,10 +4,12 @@ from __future__ import annotations
 
 from sqlalchemy import Select, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from fastapi import HTTPException
 
 from app.api.utils import normalize_q
 from app.models.studio import (
     Chapter,
+    Project,
     FileItem,
     FileUsage,
     ProjectActorLink,
@@ -17,6 +19,26 @@ from app.models.studio import (
     Shot,
 )
 from app.models.types import FileUsageKind
+from app.services.common import require_entity
+
+
+async def validate_file_usage_scope(
+    session: AsyncSession, *, project_id: str, chapter_id: str | None, shot_id: str | None,
+) -> None:
+    """Reject dangling or contradictory project/chapter/shot references before writes."""
+    await require_entity(session, Project, project_id, detail="Project not found", status_code=400)
+    chapter = None
+    if chapter_id is not None:
+        chapter = await require_entity(session, Chapter, chapter_id, detail="Chapter not found", status_code=400)
+        if chapter.project_id != project_id:
+            raise HTTPException(400, "chapter_id does not belong to project_id")
+    if shot_id is not None:
+        shot = await require_entity(session, Shot, shot_id, detail="Shot not found", status_code=400)
+        parent = await require_entity(session, Chapter, shot.chapter_id, detail="Chapter not found", status_code=400)
+        if parent.project_id != project_id:
+            raise HTTPException(400, "shot_id does not belong to project_id")
+        if chapter is not None and shot.chapter_id != chapter.id:
+            raise HTTPException(400, "shot_id does not belong to chapter_id")
 
 
 async def upsert_file_usage(
@@ -30,6 +52,7 @@ async def upsert_file_usage(
     source_ref: str | None = None,
 ) -> FileUsage:
     """按 (file_id, usage_kind, source_ref) 幂等写入或更新行列。"""
+    await validate_file_usage_scope(session, project_id=project_id, chapter_id=chapter_id, shot_id=shot_id)
     ref = (source_ref or "")[:128]
     kind_str = usage_kind.value if isinstance(usage_kind, FileUsageKind) else str(usage_kind)
 
