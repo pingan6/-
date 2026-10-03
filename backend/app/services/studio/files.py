@@ -114,6 +114,10 @@ async def update_file_meta(
     obj = await get_or_404(db, FileItem, file_id, detail=entity_not_found("File"))
     data = body.model_dump(exclude_unset=True)
     usage_payload = data.pop("usage", None)
+    # Omission means unchanged; explicit null is not a valid value for these non-null columns.
+    for field in ("name", "thumbnail", "tags"):
+        if field in data and data[field] is None:
+            raise HTTPException(400, f"{field} cannot be null")
     patch_model(obj, data)
     if usage_payload is not None:
         u = FileUsageWrite.model_validate(usage_payload)

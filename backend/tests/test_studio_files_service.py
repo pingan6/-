@@ -19,6 +19,29 @@ from app.services.studio.files import get_file_detail, list_files_paginated, upd
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("field", ["name", "thumbnail", "tags"])
+async def test_null_file_metadata_is_rejected_before_mutation(field) -> None:
+    """Explicit null cannot become a database 500 or destroy existing metadata."""
+    from fastapi import HTTPException
+
+    db, engine = await _build_session()
+    async with db:
+        file = FileItem(id="f", type=FileType.image, name="Original", thumbnail="thumb", tags=["tag"], storage_key="original.png")
+        db.add(file)
+        await db.commit()
+        with pytest.raises(HTTPException) as exc:
+            await update_file_meta(db, file_id="f", body=FileUpdate(**{field: None}))
+        assert exc.value.status_code == 400
+        assert exc.value.detail == f"{field} cannot be null"
+        assert file.name == "Original"
+        assert file.thumbnail == "thumb"
+        assert file.tags == ["tag"]
+        await update_file_meta(db, file_id="f", body=FileUpdate(name="", thumbnail="", tags=[]))
+        assert file.name == "" and file.thumbnail == "" and file.tags == []
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_file_usage_rejects_cross_project_and_cross_chapter_references() -> None:
     """Foreign keys alone cannot protect the hierarchy; mismatched valid IDs must fail."""
     from fastapi import HTTPException
