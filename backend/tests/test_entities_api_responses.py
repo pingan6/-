@@ -103,7 +103,7 @@ def test_get_actor_entity_not_found_returns_api_response(client: TestClient) -> 
         app.dependency_overrides.clear()
 
     assert response.status_code == 404
-    assert response.json() == {"code": 404, "message": "Actor not found", "data": None}
+    assert response.json() == {"code": 404, "message": "Actor not found", "data": None, "meta": None}
 
 
 def test_delete_actor_entity_returns_empty_envelope(client: TestClient) -> None:
@@ -129,7 +129,7 @@ def test_delete_actor_entity_returns_empty_envelope(client: TestClient) -> None:
         app.dependency_overrides.clear()
 
     assert response.status_code == 200
-    assert response.json() == {"code": 200, "message": "success", "data": None}
+    assert response.json() == {"code": 200, "message": "success", "data": None, "meta": None}
     assert "actor-1" not in db.actors
 
 
@@ -143,6 +143,7 @@ def test_create_entity_invalid_entity_type_returns_api_response(client: TestClie
 
     assert response.status_code == 400
     assert response.json() == {
+        "meta": None,
         "code": 400,
         "message": "entity_type must be one of: actor/character/scene/prop/costume",
         "data": None,

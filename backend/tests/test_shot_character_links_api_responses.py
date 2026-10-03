@@ -110,6 +110,7 @@ def test_upsert_shot_character_link_value_error_returns_api_response(client: Tes
 
     assert response.status_code == 400
     assert response.json() == {
+        "meta": None,
         "code": 400,
         "message": "Character does not belong to the same project",
         "data": None,
