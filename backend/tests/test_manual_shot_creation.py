@@ -38,3 +38,61 @@ async def test_manual_creation_persists_shot_and_detail_without_commit(monkeypat
     assert saved[1].camera_shot == "CU"
     assert saved[1].duration == 3
     assert result.status == "pending"
+
+def test_detail_write_failure_rolls_back_request(monkeypatch):
+    """Exercise the real request transaction: second-write failure cannot acknowledge success."""
+    from fastapi import Depends, FastAPI
+    from fastapi.testclient import TestClient
+    from app import dependencies
+
+    events = []
+
+    class Session:
+        """Track staging and rollback without touching live project data."""
+        async def __aenter__(self):
+            """Open the request session."""
+            return self
+
+        async def __aexit__(self, *_args):
+            """The dependency manages explicit cleanup."""
+
+        async def commit(self):
+            """A broken detail write must never reach this method."""
+            events.append("commit")
+
+        async def rollback(self):
+            """Record rollback of the staged shot."""
+            events.append("rollback")
+
+        async def close(self):
+            """Record cleanup."""
+            events.append("close")
+
+    async def check(*_args, **_kwargs):
+        """Keep existence checks independent of external databases."""
+
+    async def persist(_db, obj):
+        """Fail the detail write after the first shot has been staged."""
+        events.append(type(obj).__name__)
+        if len(events) == 2:
+            raise RuntimeError("test-only detail persistence failure")
+        return obj
+
+    monkeypatch.setattr(dependencies, "async_session_maker", Session)
+    monkeypatch.setattr(shots, "ensure_not_exists", check)
+    monkeypatch.setattr(shots, "require_entity", check)
+    monkeypatch.setattr(shots, "create_and_refresh", persist)
+    app = FastAPI()
+
+    @app.post("/manual-shot")
+    async def create(body: ShotCreate, db=Depends(dependencies.get_db, scope="function")):
+        """Run the actual service under the production transaction dependency."""
+        return await shots.create(db, body=body)
+
+    with TestClient(app, raise_server_exceptions=False) as client:
+        response = client.post("/manual-shot", json={
+            "id": "s", "chapter_id": "c", "index": 1, "title": "Manual",
+            "detail": {"camera_shot": "CU", "angle": "EYE_LEVEL", "movement": "STATIC", "duration": 3},
+        })
+    assert response.status_code == 500
+    assert events == ["Shot", "ShotDetail", "rollback", "close"]
